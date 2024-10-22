@@ -48,6 +48,7 @@ This is a shader mod that completely changes how the game Looks and feel.
 - improved screenefect shader for better Bloom and road reflections
 
 !! YOU HAVE PERMISSION TO CUSTOMIZE THE MOD AS LONG AS PROPS ARE GIVEN !!
+
 !! YOU HAVE PERMISSION TO SHARE AND USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
 
 
