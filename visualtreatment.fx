@@ -2,13 +2,17 @@
 // Visual Treatment
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Here you can toggle custom shaders
+// Here you can toggle custom shaders all at once
 // put "//" infront of the "#define" function to disable 
 #define USE_EFFECTS
 
 // Here you can toggle the Filter (Lut)
 // put "//" infront of the "#define" function to disable 
 #define USE_LUT
+
+// Here you can toggle the Color decompression
+// put "//" infront of the "#define" function to disable 
+//#define USE_LOG_to_LINIAR
 
 // Here you can put your screen resoluton
 // Important for Motion-Blur and some other effects
@@ -31,24 +35,34 @@
 
 // Colorgrading for Fake HDR
 // for best results in colorgrading, turn off "USE_LUT" first
-#define RED_CHANNEL     float3(1.950f, 0.000f, 0.000f)
-#define GREEN_CHANNEL   float3(0.000f, 1.700f, 0.000f)
-#define BLUE_CHANNEL    float3(0.000f, 0.000f, 1.825f)
+#define RED_CHANNEL     float3(2.100f, 0.150f, 0.150f)
+#define GREEN_CHANNEL   float3(0.150f, 1.850f, 0.150f)
+#define BLUE_CHANNEL    float3(0.150f, 0.150f, 1.975f)
+
+// Chromatic Abberation (implemented in HDR function)
+#define ABBERATION_AMOUNT 0.0035                                 // Intensity of chromatic abberation (too high values make game look bad)
+
+// Sharpening (implemented in HDR function)
+#define SHARPEN_AMOUNT 25.00f                                     // Intensity of the sharpening effect (too high values make game look bad)
 
 // Ambient Lighting
+// put "//" infront of the "#define USE_AMBIENTLIGHT" function to disable 
+#define USE_AMBIENTLIGHT
+
 #define Ambient_Intensity 0.155                                  // Intensity of ambient light                    
 #define Ambiennt_Color  float3(0.4, 0.45, 0.5)                   // Color of ambient light 
 
-// Vignette                     
+// Vignette
+// put "//" infront of the "#define USE_VIGNETTE" function to disable 
+#define USE_VIGNETTE
+
 #define VIGNETTE_AMOUNT 0.4                                      // Intensity of vignette
 #define VIGNETTE_RADIUS 1.55                                     // Radius for vignette (determines if effects gets applied as circle, eclipse etc)
 #define VIGNETTE_CURVE 2.6                                       // sets the fade length
 
-// Chromatic Abberation
-#define ABBERATION_AMOUNT 0.0035                                 // Intensity of chromatic abberation (too high values make game look bad)
-
-// Sharpening
-#define SHARPEN_AMOUNT 1.75f                                     // Intensity of the sharpening effect (too high values make game look bad)
+// Film-Grain
+// put "//" infront of the "#define USE_FILMGRAIN" function to disable 
+#define USE_FILMGRAIN
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // dont edit these
@@ -62,6 +76,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // dont edit these
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 technique visualtreatment
 {
 	pass p0
