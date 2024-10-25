@@ -504,16 +504,24 @@ float4 pixel_shader_flares(const VtoP_FLARES IN) : COLOR
     float fuzzz = saturate((scaled_fuzz_width * 0.4 - (IN.tex1.z - depth)) / (scaled_fuzz_width));
 
     // Apply a simple glow effect to the diffuse texture
-    float glow_amount = fuzzz * 0.75;
+    float glow_amount = fuzzz * 0.4;
     diffuse.rgb += diffuse.rgb * glow_amount;
-
-    // Apply a tone mapping to fake a HDR effect
-    diffuse.rgb = diffuse.rgb / (1.25 + diffuse.rgb);
-
-    // Apply the color and alpha values
+	
+	// Apply the color and alpha values
     float4 result = diffuse * IN.color;
-    result.w *= saturate(cvBaseAlphaRef.x + fuzzz);
 
+	// Define an overexposure threshold
+    float overexposure_threshold = 0.90; // Adjust this value as needed
+    float overexposure_intensity = 1.75; // How much to brighten overexposed areas
+
+    // Check for overexposure and apply the effect
+    if (result.r > overexposure_threshold || result.g > overexposure_threshold || result.b > overexposure_threshold)
+    {
+        result.rgb *= overexposure_intensity; // Brighten the color
+        // Optionally clamp the color to avoid excessive brightness
+        result.rgb = saturate(result.rgb);
+    }
+	
     return result;
 }
 
