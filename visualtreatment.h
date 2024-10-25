@@ -9,7 +9,7 @@ file base:	visualtreatment
 file ext:	h
 author:		HellRaven Mods
 
-purpose:	Visualtreatment shader for NFS Carbon REDUX
+purpose:	Visualtreatment shader for NFS Carbon
 
 *********************************************************************/
 
@@ -19,6 +19,9 @@ purpose:	Visualtreatment shader for NFS Carbon REDUX
 #define COP_INTRO_SCALE     cvVisualTreatmentParams.z
 #define BREAKER_INTENSITY       cvVisualTreatmentParams.y
 #define VIGNETTE_SCALE		cvVisualTreatmentParams.w
+
+shared float4x4 cmWorldView : cmWorldView; //WORLDVIEW
+shared float3	cvLocalEyePos : cvLocalEyePos; //LOCALEYEPOS;
 
 shared float4 cvBlurParams				: cvBlurParams;
 
@@ -361,23 +364,23 @@ float generateNoise(float2 uv)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Depth of Field shader
-float4 applyDOF(const VtoP IN, in float4 result) : COLOR
+float4 applyDOF(const VtoP IN, in float4 result)
 {
     // Calculate the depth of the current pixel
     float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex0.xy).r;
 
     // Calculate the zDist value
-    float zDist = sqrt(1 / depth);
+    float zDist = (depth * (depth / 40));
 
     // Calculate the circle of confusion (CoC) based on the zDist value
     float CoC = 0.02 * zDist; // increased CoC value to make DOF effect more pronounced
 
     // Calculate the blur amount based on the CoC value
-    float blurAmount = CoC * 32.5; // increased blur amount to make DOF effect more visible
+    float blurAmount = CoC * 650.0; // increased blur amount to make DOF effect more visible
 
     // Define autofocus parameters
-    float focusSpeed = 120.0; // adjust this value to control the autofocus speed
-    float focusThreshold = 0.55; // adjust this value to control the autofocus sensitivity
+    float focusSpeed = 120; // adjust this value to control the autofocus speed
+    float focusThreshold = 0.9; // adjust this value to control the autofocus sensitivity
 
     // Calculate the contrast of the image in the current region
     float contrast = 0;
@@ -393,7 +396,7 @@ float4 applyDOF(const VtoP IN, in float4 result) : COLOR
     contrast /= 121;
 
     // Adjust the focus based on the contrast
-    if (contrast > focusThreshold)
+    if (contrast < focusThreshold)
     {
         // Increase the focus speed if the contrast is high
         focusSpeed *= 2;
@@ -405,11 +408,11 @@ float4 applyDOF(const VtoP IN, in float4 result) : COLOR
     }
 
     // Update the focus distance based on the autofocus
-    zDist += focusSpeed * (1 - zDist);
+    zDist -= focusSpeed * (1 - zDist);
     zDist = clamp(zDist, 0.0, 1.0);
 
     // Apply the blur effect to pixels outside of the focus area
-    if (zDist > 0.9) // decreased focus area to make DOF effect more visible
+    if (zDist < 1.1) // decreased focus area to make DOF effect more visible
     {
         float4 blurredColor = float4(0, 0, 0, 0);
         for (int i = -5; i <= 5; i++)
@@ -420,30 +423,13 @@ float4 applyDOF(const VtoP IN, in float4 result) : COLOR
                 blurredColor += tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + offset);
             }
         }
-        blurredColor /= 121; // divide by the number of samples (11x11 kernel)
+        blurredColor /= 121; // divide by the number of samples (9x9 kernel)
         result = blurredColor; // set result to blurred color
     }
     else
     {
         result = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy); // set result to original color
     }
-
-    // Apply a hexagonal kernel to create a more realistic bokeh shape
-    float2 kernelOffsets[6] = {
-        float2(-0.5, -0.866),
-        float2(0.5, -0.866),
-        float2(1, 0),
-        float2(0.5, 0.866),
-        float2(-0.5,  0.866),
-        float2(-1, 0)
-    };
-    float4 hexBlurredColor = float4(0, 0, 0, 0);
-    for (int i = 0; i < 6; i++)
-    {
-        hexBlurredColor += tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + kernelOffsets[i] * blurAmount * texelSize);
-    }
-    hexBlurredColor /= 6.0;
-    result = hexBlurredColor; // set result to hex blurred color
 
     return result;
 }
@@ -507,8 +493,7 @@ float4 applyHDR(const VtoP IN, in float4 result) {
     float HDRPower = FAKEHDR_POWER;
     float radius1 = FAKEHDR_RADIUS1;
     float radius2 = FAKEHDR_RADIUS2;
-    result = applyDOF(IN, result);;
-    float3 color = applySharpen(IN, result);
+    float3 color = applyDOF(IN, result) + (applySharpen(IN, result) / 5);
 
     float3 bloom_sum1 = float3(0, 0, 0);
     float3 bloom_sum2 = float3(0, 0, 0);
@@ -598,64 +583,11 @@ float Overlay(float LayerA, float LayerB)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Bloom Shader
-float4 applyBloom(const VtoP IN, in float4 result) : COLOR
-{
-    // Define the bloom threshold and intensity
-    float threshold = 0.9;
-    float intensity = 10.0;
-    float bloomRadiusMin = 0.01;
-    float bloomRadiusMax = 0.1;
-
-    // Sample the texture at the current position
-    float4 sample = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy);
-
-    // Calculate luminance
-    float luminance = dot(sample.rgb, float3(0.2126, 0.7152, 0.0722));
-
-    // Check if the luminance is above the threshold
-    if (luminance > threshold)
-    {
-        // Calculate bloom amount based on luminance
-        float bloomAmount = (luminance - threshold) * intensity;
-
-        // Calculate bloom radius based on luminance
-        float bloomRadius = lerp(bloomRadiusMin, bloomRadiusMax, bloomAmount);
-
-        // Define bloom kernel
-        float2 kernelOffsets[9] = {
-            float2(-bloomRadius, -bloomRadius),
-            float2(0, -bloomRadius),
-            float2(bloomRadius, -bloomRadius),
-            float2(-bloomRadius, 0),
-            float2(0, 0),
-            float2(bloomRadius, 0),
-            float2(-bloomRadius, bloomRadius),
-            float2(0, bloomRadius),
-            float2(bloomRadius, bloomRadius)
-        };
-
-        // Simulate light scattering by adding a Gaussian blur
-        float4 blurredSample = float4(0, 0, 0, 0);
-        for (int i = 0; i < 9; i++)
-        {
-            blurredSample += tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + kernelOffsets[i]);
-        }
-        blurredSample /= 9.0;
-
-        // Add blurred sample to result
-        result.rgb += blurredSample.rgb * bloomAmount;
-    }
-
-    return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Filmgrain shader
 float4 applyFilmGrain(const VtoP IN, in float4 result) : COLOR
 {
     // Sample a noise texture to simulate film grain
-    float2 noiseUV = IN.tex0.xy * 10.0f;
+    float2 noiseUV = IN.tex0.xy * 5.0f;
     float noise = generateNoise(noiseUV);
 
     // Apply the noise to the screen texture
@@ -714,10 +646,19 @@ float4 applyEffects(const VtoP IN, in float4 result)
 float4 ShaderPass(const VtoP IN, in float4 result) 
 {
     result = applyEffects(IN, result);
+
+#ifdef USE_AMBIENTLIGHT
     result = applyAmbientLighting(IN, result);
-    result = applyBloom(IN, result);
-    result = applyFilmGrain(IN, result);
+#endif
+
+#ifdef USE_VIGNETTE
     result = applyVignette(IN, result);
+#endif
+
+#ifdef USE_FILMGRAIN
+    result = applyFilmGrain(IN, result);
+#endif
+
     return result;
 }
 #endif
@@ -740,7 +681,9 @@ float4 PS_VisualTreatment(const VtoP IN) : COLOR
 #endif
 
     // Convert from log space to linear space and clamp[0,1]
+#ifdef USE_LOG_to_LINIAR
     result.xyz = DeCompressColourSpace(result.xyz);
+#endif
 
 #ifdef USE_LUT
     // LUT filter (enable LUT)
