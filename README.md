@@ -54,7 +54,7 @@ This is a shader mod that completely changes how the game Looks and feel.
 
 
 
-![Thumbnail0](https://github.com/user-attachments/assets/10bcbe2b-0cb7-434f-bb9f-a340a67d6bd5)
+![Thumbnail0](https://github.com/user-attachments/assets/fd2df166-2f18-443b-9a31-24dad3d113c2)
 ![Need for Speed™ Carbon 22 10 2024 01_35_57](https://github.com/user-attachments/assets/674f60a2-7aa9-479b-8503-dd7797587671)
 ![Screenshot 2024-10-22 013427](https://github.com/user-attachments/assets/910a8d9d-4e6b-4635-b322-08b1d677e1de)
 ![Screenshot 2024-10-18 023836](https://github.com/user-attachments/assets/935f75f6-26cb-4455-82d8-c116ee0a2666)
