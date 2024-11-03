@@ -46,6 +46,7 @@ This is a shader mod that completely changes how the game Looks and feel.
 - (new!) added Camera Distortion shader
 - (new!) added Color desaturation shader
 - (new!) made cliff fall, cop intro and speedbreaker effects editable
+- (new!) added Fog Shader (currently nor recommended to use, use FogOptions instead: https://nfsmods.xyz/mod/729)
 
 - balanced brightness-levels for Luma 709
 - improved code Performance
