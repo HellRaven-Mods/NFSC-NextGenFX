@@ -1,18 +1,18 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
-// Defined out for the Xbox360 - only needed on the PC
-#define DECLARE_TEXTURE(textured)	shared texture textured : textured;
-#define ASSIGN_TEXTURE(textured)	Texture = <textured>;
+#define DECLARE_TEXTURE(textured)	                 shared texture textured : textured;
+#define ASSIGN_TEXTURE(textured)	                 Texture = <textured>;
 #define DECLARE_MINFILTER(default_filter)			 MINFILTER = default_filter;
 #define DECLARE_MAGFILTER(default_filter)			 MAGFILTER = default_filter;
 #define DECLARE_MIPFILTER(default_filter)			 MIPFILTER = default_filter;
 #define COMPILETIME_BOOL bool
 #define cmWorldViewProj WorldViewProj
-//#define DIFFUSE_SAMPLER DIFFUSEMAP_SAMPLER
-//#define NORMAL_SAMPLER NORMALMAP_SAMPLER
 
 /////////////////////////////////////////////////////////////////////////////////////////
+// Standart Calculations
+/////////////////////////////////////////////////////////////////////////////////////////
+
 float4x4	cmWorldViewProj			: WorldViewProj;
 float4		cvScreenOffset			: cvScreenOffset;
 float4		cvVertexPowerBrightness : cvVertexPowerBrightness;
@@ -43,27 +43,13 @@ float3 ScaleHeadLightIntensity(float3 colour)
     return result;
 }
 
-
-
 /////////////////////////////////////////////////////////////////////////////////////////
 // HDR Colour Space compression
 /////////////////////////////////////////////////////////////////////////////////////////
-/*#define kCompressCoeff ( 1.0f )
-float3 CompressColourSpace(float3 colour)
-{
-    return colour / (kCompressCoeff + colour);
-}
-
-float3 DeCompressColourSpace(float3 colour)
-{
-    float3 clr = max(0.01, kCompressCoeff - colour);
-    return colour / clr;
-}*/
 
 float3 CompressColourSpace(float3 c)
 {
     // filmic response, without implicit gamma
-    // GammaCompress() is active, and does a sqrt() after this response curve
     return (1 - (pow(1 - (c * 0.5), 2)));
 }
 
