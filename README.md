@@ -48,6 +48,7 @@ This is a shader mod that completely changes how the game Looks and feel.
 - (new!) made cliff fall, cop intro and speedbreaker effects editable
 - (new!) added Fog Shader (currently nor recommended to use, use FogOptions instead: https://nfsmods.xyz/mod/729)
 
+
 - balanced brightness-levels for Luma 709
 - improved code Performance
   - (new!) now only enabled effects get calculated, that way, we improve Performance alot
