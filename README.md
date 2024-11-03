@@ -22,6 +22,8 @@ This is a shader mod that completely changes how the game Looks and feel.
 - create a folder named FX in game root directory
 - copy files into that FX folder
 
+**additional note:** The Shader is meant to be used with Project Palmont (https://nfsmods.xyz/mod/5165) but also works fine with the vanilla game
+
 **How to customize the mod:**
 -----------------------------------------------------------------------------------------------
 - open "visualtreamtent.fx" with VisualStudio/Code, NotePad+ or any Editor you want
