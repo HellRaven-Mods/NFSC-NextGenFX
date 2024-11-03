@@ -843,7 +843,7 @@ float4 ShaderPass(const VtoP IN, in float4 result)
 // Visualtreatment Function
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float4 PS_VisualTreatment(const VtoP IN, uniform bool doDepthOfField) : COLOR
+float4 PS_VisualTreatment(const VtoP IN, uniform bool doDepthOfField, uniform bool doColourFade) : COLOR
 {
     float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex0).r;
     float4 result = tex2D(DIFFUSE_SAMPLER, IN.tex0);
@@ -927,7 +927,7 @@ float4 PS_VisualTreatment(const VtoP IN, uniform bool doDepthOfField) : COLOR
 // Cliff-fall Function
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float4 PS_UvesOverCliff(const VtoP IN) : COLOR
+float4 PS_UvesOverCliff(const VtoP IN, uniform bool doColourFade) : COLOR
 {
     float4 result;
 
