@@ -163,7 +163,7 @@ technique uvesovercliff
     pass p0
     {
         VertexShader = compile vs_3_0 vertex_shader_passthru();
-        PixelShader = compile ps_3_0 PS_UvesOverCliff();
+        PixelShader = compile ps_3_0 PS_UvesOverCliff(DO_COLOUR_FADE(false));
     }
 }
 
@@ -172,7 +172,7 @@ technique uvesovercliffdarken
     pass p0
     {
         VertexShader = compile vs_3_0 vertex_shader_passthru();
-        PixelShader = compile ps_3_0 PS_UvesOverCliff();
+        PixelShader = compile ps_3_0 PS_UvesOverCliff(DO_COLOUR_FADE(true));
     }
 }
 
