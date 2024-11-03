@@ -32,21 +32,27 @@ This is a shader mod that completely changes how the game Looks and feel.
 
 **List of what added and changed:**
 -----------------------------------------------------------------------------------------------
-- New and better Motionblur: Utalizes motionvectors now
+- better Motionblur: Utalizes motionvectors now
 - added a simple DOF-shader
+  - (new!) fixed (now actually applies DOF)
 - added reimagined "HDR" with colorgrading
 - added ambient-lighting
 - added Vignette
-- implemented ACES2 and FILMIC tonemaps (FILMIC activated at beginning, you can Change it)
-- implemented chromatic abberation
-- included a simple sharpen effect
-- added Film-grain effect
+- added ACES2 and FILMIC tonemaps (ACES2 activated at beginning, you can Change it)
+- added chromatic abberation shader
+- added sharpen shader
+- added Film-grain shader
+- (new!) added Bloom shader
+- (new!) added Camera Distortion shader
+- (new!) added Color desaturation shader
+- (new!) made cliff fall, cop intro and speedbreaker effects editable
 
 - balanced brightness-levels for Luma 709
 - improved code Performance
+  - (new!) now only enabled effects get calculated, that way, we improve Performance alot
 - better particle shader for better Flares (Buggy when you fall from cliff in Canyon races) and smoke
 - improved log to linear colorspace decompression
-- improved screenefect shader for better Bloom and road reflections
+- improved screenefect shader for better road reflections and blur/Bloom calculations
 
 !! YOU HAVE PERMISSION TO CUSTOMIZE THE MOD AS LONG AS PROPS ARE GIVEN !!
 
