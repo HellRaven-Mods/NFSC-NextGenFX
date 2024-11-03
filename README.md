@@ -47,23 +47,23 @@ This is a shader mod that completely changes how the game Looks and feel.
 - (new!) added Color desaturation shader
 - (new!) made cliff fall, cop intro and speedbreaker effects editable
 - (new!) added Fog Shader (currently nor recommended to use, use FogOptions instead: https://nfsmods.xyz/mod/729)
-
-
+-----------------------------------------------------------------------------------------------
 - balanced brightness-levels for Luma 709
 - improved code Performance
   - (new!) now only enabled effects get calculated, that way, we improve Performance alot
 - better particle shader for better Flares (Buggy when you fall from cliff in Canyon races) and smoke
 - improved log to linear colorspace decompression
 - improved screenefect shader for better road reflections and blur/Bloom calculations
-
+-----------------------------------------------------------------------------------------------
 !! YOU HAVE PERMISSION TO CUSTOMIZE THE MOD AS LONG AS PROPS ARE GIVEN !!
 
 !! YOU HAVE PERMISSION TO SHARE AND USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
-
+-----------------------------------------------------------------------------------------------
 
 
 ![Thumbnail0](https://github.com/user-attachments/assets/fd2df166-2f18-443b-9a31-24dad3d113c2)
+![Screenshot 2024-11-03 023344](https://github.com/user-attachments/assets/813bed66-8bca-42de-b997-4e7a9c1664ce)
 ![Need for Speed™ Carbon 22 10 2024 01_35_57](https://github.com/user-attachments/assets/674f60a2-7aa9-479b-8503-dd7797587671)
-![Screenshot 2024-10-22 013427](https://github.com/user-attachments/assets/910a8d9d-4e6b-4635-b322-08b1d677e1de)
 ![Screenshot 2024-10-18 023836](https://github.com/user-attachments/assets/935f75f6-26cb-4455-82d8-c116ee0a2666)
+
 
