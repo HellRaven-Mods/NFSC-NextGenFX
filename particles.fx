@@ -1,6 +1,7 @@
-//
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Standard Effect
-//
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 #include "global.h"
 
 shared float4x4 cmWorldView			: cmWorldView; //WORLDVIEW
@@ -18,19 +19,26 @@ shared float4 cmPrevWorldViewProj		: cmPrevWorldViewProj; //BASEALPHAREF;
 shared float  cfMipMapBias			: cfMipMapBias;
 shared float4 cvFogColour           : cvFogColour;
 
+float4 cavLightColours[40] : cavLightColours;
+float4 cavLightPositions[40] : cavLightPositions;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Constants
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static const float FuzzWidth = 0.5f;
 
+static const float magnitude_debug = 1.0;
+
 static const float MaxParticleSize = 1.2f;
 static const float MaterialShininess = 8;
-	
-float4	cavLightColours[40] : cavLightColours;
-float4	cavLightPositions[40] : cavLightPositions;
 
-// these should be artist controlled
-float3 ambient_colour = float3(0.4,0.45,0.5); // PC edit - PC version has it in a variable, not a static definition...
+// these should be artist controlled	
+float3 ambient_colour = float3(0.4, 0.45, 0.5);
 
-float magnitude_debug = 1.0;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Samplers
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_TEXTURE(MISCMAP1_TEXTURE)
 sampler MISCMAP1_SAMPLER = sampler_state	// backbuffer for screen distortion
@@ -92,6 +100,10 @@ sampler DEPTHBUFFER_SAMPLER = sampler_state
     MAGFILTER = LINEAR;
 };
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Structs
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 struct VS_INPUT
 {
 	float4 position : POSITION;
@@ -133,29 +145,9 @@ struct VtoP_Depth
 	float dist		: COLOR0;
 };
 
-//-----------------------------------------------------------------------------
-// PARTICLES
-//
-
-float ComputeFuzzz(const VtoP_NormalMapped IN)
-{
-    float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex1.xy).x;
-
-	// NOTE! we are assuming that near is 0.5 and far is 10000!!!!
-	
-    const float zFar = 10000;
-    const float zNear = 0.5;
-
-    float Q = zFar / (zFar - zNear);
-    float zDist = (-Q * zNear / (depth - Q));
-
-    float depthBufferDistToParticle = IN.position2.z / IN.position2.w;
-    float distanceToParticle = (-Q * zNear / (depthBufferDistToParticle - Q));
-
-    float distanceBetweenParticleAndGround = abs(zDist - distanceToParticle);
-    float fuzzz = saturate(distanceBetweenParticleAndGround * 1);
-    return fuzzz;
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Build Rotation
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 float3x3 BuildRotate(float angle, float3 rotAxis)
 {
@@ -187,6 +179,34 @@ float3x3 BuildRotate(float angle, float3 rotAxis)
 
     return invM;
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Compute Fuzz Value
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float ComputeFuzzz(const VtoP_NormalMapped IN)
+{
+    float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex1.xy).x;
+
+	// NOTE! we are assuming that near is 0.5 and far is 10000!!!!
+	
+    const float zFar = 10000;
+    const float zNear = 0.5;
+
+    float Q = zFar / (zFar - zNear);
+    float zDist = (-Q * zNear / (depth - Q));
+
+    float depthBufferDistToParticle = IN.position2.z / IN.position2.w;
+    float distanceToParticle = (-Q * zNear / (depthBufferDistToParticle - Q));
+
+    float distanceBetweenParticleAndGround = abs(zDist - distanceToParticle);
+    float fuzzz = saturate(distanceBetweenParticleAndGround * 1);
+    return fuzzz;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Particles
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 VtoP_NormalMapped vertex_shader_particles(const VS_INPUT IN)
 {
@@ -271,7 +291,7 @@ VtoP_NormalMapped vertex_shader_particles(const VS_INPUT IN)
 PS_OUTPUT pixel_shader_particles(const VtoP_NormalMapped IN)
 {
 	PS_OUTPUT OUT;
-	float  shadow = 1;
+	float shadow = 1;
 
 	float4 baseColour = tex2D(DIFFUSE_SAMPLER, IN.tex) * IN.color;
 
@@ -299,7 +319,7 @@ PS_OUTPUT pixel_shader_particles(const VtoP_NormalMapped IN)
 	
 	// Add rim lighting
     float rimAmount = 1 - nDotL;
-    rimAmount = pow(rimAmount, 2);
+    rimAmount = pow(rimAmount, 1);
     float3 rimColour = rimAmount * IN.lightColor;
 
 	float3 diffuseColour = nDotL * IN.lightColor;
@@ -318,30 +338,9 @@ PS_OUTPUT pixel_shader_particles(const VtoP_NormalMapped IN)
 	return OUT;
 }
 
-technique fuzzz <int shader = 1;>
-{
-	pass p0
-	{
-		VertexShader = compile vs_3_0 vertex_shader_particles();
-		PixelShader  = compile ps_3_0 pixel_shader_particles();
-	}
-}
-
-technique no_fuzzz <int shader = 1; >
-{
-	pass p0
-	{
-		VertexShader = compile vs_3_0 vertex_shader_particles();
-		PixelShader = compile ps_3_0 pixel_shader_particles();
-	}
-}
-
-
-///////////////////////////////////////////////////////////////////////////////////////
-//
-// RAINDROPS - CUSTOM SHADERS FOR RAINDROPS - this is needed because raindrops are basically invisible otherwise...
-//
-///////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Raindrops
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 PS_OUTPUT pixel_shader_raindrop(const VtoP_NormalMapped IN) : COLOR
 {
@@ -407,23 +406,9 @@ PS_OUTPUT pixel_shader_raindrop(const VtoP_NormalMapped IN) : COLOR
     return OUT;
 }
 
-technique raindrop <int shader = 1;>
-{
-	pass p0
-	{
-		FogEnable = TRUE;
-
-		VertexShader = compile vs_1_1 vertex_shader_particles();
-		PixelShader  = compile ps_3_0 pixel_shader_raindrop();
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-//
-// FLARES
-//
-///////////////////////////////////////////////////////////////////////////////////////
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Flares
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct VS_INPUT_FLARES
 {
@@ -518,27 +503,14 @@ float4 pixel_shader_flares(const VtoP_FLARES IN) : COLOR
     if (result.r > overexposure_threshold || result.g > overexposure_threshold || result.b > overexposure_threshold)
     {
         result.rgb *= overexposure_intensity; // Brighten the color
-        // Optionally clamp the color to avoid excessive brightness
-        result.rgb = saturate(result.rgb);
     }
 	
     return result;
 }
 
-technique flares <int shader = 1; >
-{
-	pass p0
-	{
-		VertexShader = compile vs_3_0 vertex_shader_flares();
-		PixelShader  = compile ps_3_0 pixel_shader_flares();
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-//
-// STREAK FLARES
-//
-///////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Streak Flares
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct VtoP_SFLARES
 {
@@ -621,7 +593,6 @@ VtoP_SFLARES vertex_shader_streak_flares(const VS_INPUT_FLARES IN)
     return OUT;
 }
 
-
 float4 pixel_shader_streak_flares(const VtoP_SFLARES IN) : COLOR
 {
 	float4 result = tex2D(DIFFUSE_SAMPLER, IN.tex);	
@@ -630,20 +601,10 @@ float4 pixel_shader_streak_flares(const VtoP_SFLARES IN) : COLOR
 	return result;
 }
 
-technique streak_flares // <int shader = 1;>
-{
-	pass p0
-	{
-		VertexShader = compile vs_1_1 vertex_shader_streak_flares();
-		PixelShader  = compile ps_3_0 pixel_shader_streak_flares();
-	}
-}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Onscreen Rain Effect
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-///////////////////////////////////////////////////////////////////////////////////////
-//
-// Onscreen rain particle effect
-//
 struct VtoP_RAIN
 {
 	float4 position  : POSITION;
@@ -688,6 +649,58 @@ float4 pixel_shader_onscreen_distort(const VtoP_RAIN IN) : COLOR0
     result.w = opacity.r * cvBaseAlphaRef.x;
 
     return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Techniques
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+technique fuzzz <int shader = 1;>
+{
+    pass p0
+    {
+        VertexShader = compile vs_3_0 vertex_shader_particles();
+        PixelShader = compile ps_3_0 pixel_shader_particles();
+    }
+}
+
+technique no_fuzzz <int shader = 1; >
+{
+    pass p0
+    {
+        VertexShader = compile vs_3_0 vertex_shader_particles();
+        PixelShader = compile ps_3_0 pixel_shader_particles();
+    }
+}
+
+
+technique raindrop <int shader = 1;>
+{
+    pass p0
+    {
+        FogEnable = TRUE;
+
+        VertexShader = compile vs_1_1 vertex_shader_particles();
+        PixelShader = compile ps_3_0 pixel_shader_raindrop();
+    }
+}
+
+technique flares <int shader = 1; >
+{
+    pass p0
+    {
+        VertexShader = compile vs_3_0 vertex_shader_flares();
+        PixelShader = compile ps_3_0 pixel_shader_flares();
+    }
+}
+
+technique streak_flares <int shader = 1;>
+{
+    pass p0
+    {
+        VertexShader = compile vs_1_1 vertex_shader_streak_flares();
+        PixelShader = compile ps_3_0 pixel_shader_streak_flares();
+    }
 }
 
 technique onscreen_distort <int shader = 1;>
