@@ -1,4 +1,4 @@
-# OPUS-VANILLA-CustomVT
+# [NFSC] NextGenFX
 Shader-Mod for NFS Carbon
 
 Hi Folks,
