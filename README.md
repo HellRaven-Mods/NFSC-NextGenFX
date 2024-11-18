@@ -37,7 +37,7 @@ This is a shader mod that completely changes how the game Looks and feel.
 - better Motionblur: Utalizes motionvectors now
 - added a simple DOF-shader
   - (new!) fixed (now actually applies DOF)
-- added reimagined "HDR" with colorgrading
+- added reimagined "HDR"
 - added ambient-lighting
 - added Vignette
 - added ACES2 and FILMIC tonemaps (ACES2 activated at beginning, you can Change it)
@@ -49,13 +49,15 @@ This is a shader mod that completely changes how the game Looks and feel.
 - (new!) added Color desaturation shader
 - (new!) made cliff fall, cop intro and speedbreaker effects editable
 - (new!) added Fog Shader (currently nor recommended to use, use FogOptions instead: https://nfsmods.xyz/mod/729)
+- (new!) added standalone colorgrading
+- (new!) added color temperature adjustment
 -----------------------------------------------------------------------------------------------
 - balanced brightness-levels for Luma 709
 - improved code Performance
   - (new!) now only enabled effects get calculated, that way, we improve Performance alot
-- better particle shader for better Flares (Buggy when you fall from cliff in Canyon races) and smoke
+- better particle shader for better Flares (bug seems to be fixed) and smoke
 - improved log to linear colorspace decompression
-- improved screenefect shader for better road reflections and blur/Bloom calculations
+- (BONUS) improved screenefect shader for better road reflections on Project Palmont
 -----------------------------------------------------------------------------------------------
 !! YOU HAVE PERMISSION TO CUSTOMIZE THE MOD AS LONG AS PROPS ARE GIVEN !!
 
