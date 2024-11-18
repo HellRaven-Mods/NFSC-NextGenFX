@@ -18,13 +18,13 @@ purpose:	Visualtreatment-shader for NFS Carbon
 // CONSTANTS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define FLASH_SCALE		cvVisualTreatmentParams.x
+#define FLASH_SCALE		    cvVisualTreatmentParams.x
 #define COP_INTRO_SCALE     cvVisualTreatmentParams.z
-#define BREAKER_INTENSITY       cvVisualTreatmentParams.y
+#define BREAKER_INTENSITY   cvVisualTreatmentParams.y
 #define VIGNETTE_SCALE		cvVisualTreatmentParams.w
 
-shared float4x4 cmWorldView : cmWorldView; //WORLDVIEW
-shared float3	cvLocalEyePos : cvLocalEyePos; //LOCALEYEPOS;
+shared float4x4 cmWorldView     : cmWorldView; //WORLDVIEW
+shared float3	cvLocalEyePos   : cvLocalEyePos; //LOCALEYEPOS;
 
 shared float4 cvBlurParams				: cvBlurParams;
 
@@ -33,11 +33,11 @@ static const float3	LUMINANCE_VECTOR  = float3(0.2125f, 0.7154f, 0.0721f);
 
 // PARAMETERS
 // Depth of Field variables
-shared float4 cvDepthOfFieldParams : cvDepthOfFieldParams;
-shared bool cbDrawDepthOfField : cbDrawDepthOfField;
-shared bool cbDepthOfFieldEnabled : cbDepthOfFieldEnabled;
+shared float4 cvDepthOfFieldParams      : cvDepthOfFieldParams;
+shared bool cbDrawDepthOfField          : cbDrawDepthOfField;
+shared bool cbDepthOfFieldEnabled       : cbDepthOfFieldEnabled;
 
-shared float4 cvVisualEffectFadeColour : cvVisualEffectFadeColour;
+shared float4 cvVisualEffectFadeColour  : cvVisualEffectFadeColour;
 
 // Time Ticker
 float cfTimeTicker : cfTimeTicker;
@@ -48,14 +48,14 @@ static const int MAX_SAMPLES = 16;	// Maximum texture grabs
 shared float4 cavSampleOffsetWeights[MAX_SAMPLES]	: REG_cavSampleOffsetWeights;
 
 // Tone	mapping	variables
-shared float cfBloomScale				: cfBloomScale;
+shared float cfBloomScale				            : cfBloomScale;
 
-shared float cfVignetteScale        : cfVignetteScale;
-shared float4 cvVisualTreatmentParams : cvVisualTreatmentParams;
-shared float4 cvVisualTreatmentParams2 : cvVisualTreatmentParams2;
-shared float cfVisualEffectVignette : cfVisualEffectVignette;
-shared float cfVisualEffectBrightness : cfVisualEffectBrightness;
-shared float4 cvTextureOffset	: cvTextureOffset;
+shared float cfVignetteScale                        : cfVignetteScale;
+shared float4 cvVisualTreatmentParams               : cvVisualTreatmentParams;
+shared float4 cvVisualTreatmentParams2              : cvVisualTreatmentParams2;
+shared float cfVisualEffectVignette                 : cfVisualEffectVignette;
+shared float cfVisualEffectBrightness               : cfVisualEffectBrightness;
+shared float4 cvTextureOffset	                    : cvTextureOffset;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Samplers
@@ -266,8 +266,8 @@ float2 UpsampleMotionVector(float2 lowResMotionVector, float2 texCoord) : SV_Tar
 }
 
 // Sum of all weights
-const float totalWeight = 31.0f; 
-const float kWeights[8] = { 10.0, 8.0, 6.0, 4.0, 2.0, 1.0, 0.5, 0.25};
+const float totalWeight = 35.0f; 
+const float kWeights[8] = { 10.0, 8.0, 6.0, 4.0, 2.0, 1.0, 0.5, 0};
 
 float4 PS_MotionBlur(const VtoP_MOTIONBLUR IN) : COLOR
 {
@@ -377,6 +377,34 @@ float generateNoise(float2 uv)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Pause Blur shader
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifndef DONTDOPAUSEBLUR
+float4 applyPauseBlur(const VtoP IN, in float4 result)
+{
+    // Depth-based blur calculations
+    float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex0).r;
+    float zDist = depth * (depth - 1);
+    float focalDist = cvDepthOfFieldParams.x;
+    float depthOfField = cvDepthOfFieldParams.y;
+    float falloff = cvDepthOfFieldParams.z;
+    float maxBlur = cvDepthOfFieldParams.w;
+    float blurAmount = saturate((abs(zDist - focalDist) - depthOfField) * falloff / zDist);
+    float mipLevel = (blurAmount * maxBlur) * 5;
+
+    // Get blurred texture based on mipLevel
+    float3 blurredTex = tex2Dbias(MISCMAP6_SAMPLER, float4(IN.tex0.xy, 2, mipLevel));
+
+    // Conditional blend based on blur amount
+    float blendStrength = saturate(blurAmount);
+    float4 color = float4(lerp(result.xyz, blurredTex, blendStrength * 2), IN.tex0.r);
+
+    return color;
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Depth of Field shader
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -453,22 +481,40 @@ float4 applyHDR(const VtoP IN, in float4 result)
     bloom_sum1 *= 0.32;
     bloom_sum2 *= 0.34;
 
-    // Contrast Adjustment
-    float contrast = 1.1;
-    color = (color - 0.5) * contrast + 0.5;
-
-    // Color Grading
-    float3 r = RED_CHANNEL;
-    float3 g = GREEN_CHANNEL;
-    float3 b = BLUE_CHANNEL;
-
     float dist = radius2 - radius1;
     float3 HDR = (color + (bloom_sum2 - bloom_sum1)) * dist;
     float3 blend = HDR + color;
     color = blend * pow(abs(blend), abs(HDRPower) - 1) + HDR;
-    return float4(((color / 2.2) * (r + g + b)), result.w);
+    return float4(color , result.w);
 }
 #endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Color Temperatur
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3 adjustTemperature(float3 color, float temperature)
+{
+    // Adjust red and blue channels based on temperature parameter
+    color.r += temperature * 0.1;  // Temperature > 0 for warmer, < 0 for cooler
+    color.b -= temperature * 0.1;
+
+    return saturate(color);  // Ensure the color values are clamped between 0 and 1
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Color Grading
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3 applyColorGrading(float3 color)
+{
+    float3 gradedColor;
+    gradedColor.r = dot(color, RED_CHANNEL);   // Dot product combines channel influences
+    gradedColor.g = dot(color, GREEN_CHANNEL);
+    gradedColor.b = dot(color, BLUE_CHANNEL);
+
+    return saturate(gradedColor); // Clamping to ensure values are within the [0, 1] range
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Desaturation Shader
@@ -491,7 +537,7 @@ float4 applyDesaturation(float4 result, float amount)
 float4 applySharpen(const VtoP IN, float4 result)
 {
     // Define the texel size based on your texture resolution
-    float2 texelSize = float2(1.0f / 2560.0f, 1.0f / 1440.0f);
+    float2 texelSize = float2(1.0f / SCREEN_WIDTH, 1.0f / SCREEN_HEIGHT);
 
     // Sample the neighboring pixels around the current pixel
     float4 center = result;
@@ -613,7 +659,6 @@ float4 PS_FogDepth(const VtoP IN, in float4 result) : COLOR
 float4 applyBloom(float2 texCoord)
 {
     float blurSize = 1.0 / 4096.0; // Adjust according to your texture size
-    float BloomIntensity = 1.15;
     float4 sum = float4(0, 0, 0, 0);
 
     // Apply gaussian blur sampling using the BloomSampler
@@ -629,7 +674,7 @@ float4 applyBloom(float2 texCoord)
 
     // Apply threshold and intensity
     float4 bloom = max(float4(0, 0, 0, 0), sum - 0.15); // Adjust threshold based on your scene requirements
-    bloom = saturate(bloom * BloomIntensity);
+    bloom = saturate(bloom * BLOOM_INTENSITY);
 
     return bloom;
 }
@@ -642,8 +687,6 @@ float4 applyBloom(float2 texCoord)
 #ifdef USE_ABBERATION
 float4 applyChromaticAberration(const VtoP IN, float4 color) : COLOR
 {
-    float aberrationStrength = 0.015;
-
     // Calculate edge factor using squared distance for optimized falloff
     float2 screenCenter = float2(0.5, 0.5);
     float2 screenPos = IN.tex0.xy;
@@ -651,9 +694,9 @@ float4 applyChromaticAberration(const VtoP IN, float4 color) : COLOR
     float edgeFactor = saturate((dot(diff, diff) - 0.03) / 0.64);  // Adjusted range for squared distance
 
     // Aberration offsets per channel based on edgeFactor
-    float2 redOffset = screenPos + edgeFactor * aberrationStrength * float2(cos(cfTimeTicker), sin(cfTimeTicker));
+    float2 redOffset = screenPos + edgeFactor * ABBERATION_STRENTGH * float2(cos(cfTimeTicker), sin(cfTimeTicker));
     float2 greenOffset = screenPos;
-    float2 blueOffset = screenPos + edgeFactor * aberrationStrength * float2(-sin(cfTimeTicker), -cos(cfTimeTicker));
+    float2 blueOffset = screenPos + edgeFactor * ABBERATION_STRENTGH * float2(-sin(cfTimeTicker), -cos(cfTimeTicker));
 
     // Brightness factor to enhance the aberration colors
     float brightnessFactor = 1.0;
@@ -678,7 +721,6 @@ float4 applyChromaticAberration(const VtoP IN, float4 color) : COLOR
 
 #ifdef USE_DISTORTION
 uniform float2 DISTORTION_CENTER = float2(0.5, 0.5);    // Center of distortion
-uniform float DISTORTION_STRENGTH = 0.03;               // Amount of distortion
 
 float4 applyDistortion(const VtoP IN, float4 result)
 {
@@ -748,39 +790,21 @@ float4 applyFilmGrain(const VtoP IN, in float4 result) : COLOR
     float noise = generateNoise(noiseUV);
 
     // Apply the noise to the screen texture
-    result.rgb += noise * 0.015f;
+    result.rgb += noise * FILM_GRAIN_STRENGTH;
 
     return result;
 }
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Pause Blur shader
+// Contrast Adjustment
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef DONTDOPAUSEBLUR
-float4 applyPauseBlur(const VtoP IN, in float4 result)
+float3 AdjustContrast(float3 color, float contrast)
 {
-    // Depth-based blur calculations
-    float depth         = tex2Dbias(DEPTHBUFFER_SAMPLER, IN.tex0).r;
-    float zDist         = depth * (depth - 1);
-    float focalDist     = cvDepthOfFieldParams.x;
-    float depthOfField  = cvDepthOfFieldParams.y;
-    float falloff       = cvDepthOfFieldParams.z;
-    float maxBlur       = cvDepthOfFieldParams.w;
-    float blurAmount    = saturate((abs(zDist - focalDist) - depthOfField) * falloff / zDist);
-    float mipLevel      = (blurAmount * maxBlur) * 5;
-
-    // Get blurred texture based on mipLevel
-    float3 blurredTex = tex2Dbias(MISCMAP6_SAMPLER, float4(IN.tex0.xy, 1, mipLevel));
-
-    // Conditional blend based on blur amount
-    float blendStrength = saturate(blurAmount);
-    float4 color = float4(lerp(result.xyz, blurredTex, blendStrength), result.w);
-
-    return color;
+    // Center the color around 0.1, apply contrast, then shift back
+    return lerp(0.5, color, contrast);
 }
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Shader Pass
@@ -848,18 +872,31 @@ float4 PS_VisualTreatment(const VtoP IN, uniform bool doDepthOfField, uniform bo
     float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex0).r;
     float4 result = tex2D(DIFFUSE_SAMPLER, IN.tex0);
 
-#ifdef USE_HDR
-    // HDR + DOF
-    result = applyHDR(IN, result);
-#endif
+    // Calculate Luminance
+    float luminance = dot(result.xyz, LUMINANCE_VECTOR);
 
 #ifndef DONTDOPAUSEBLUR
     // Race Start DOF and Pause Blur
     if (doDepthOfField && cbDepthOfFieldEnabled)	// Compile time branch is optimized out
     {
         result = applyPauseBlur(IN, result);
-}
+    }
 #endif
+
+    // Apply Brightness and contrast Adjustment
+    result.rgb *= BRIGHTNESS;
+    result.rgb = AdjustContrast(result.rgb, CONTRAST);
+
+    // Apply Color Grading and Luminance Adjustments
+    result.rgb = applyColorGrading(result.rgb);
+
+#ifdef USE_HDR
+    // HDR + DOF
+    result = applyHDR(IN, result);
+#endif
+
+    // Temperature adjustment
+    result.rgb = adjustTemperature(result.rgb, COLOR_TEMPERATURE);
 
 #ifdef USE_EFFECTS
     // Effects
@@ -884,12 +921,6 @@ float4 PS_VisualTreatment(const VtoP IN, uniform bool doDepthOfField, uniform bo
 
     // clamp anything above 1
     result.rgb = saturate(result.rgb);
-
-    // Lens contamination gradient effect 
-    result.xyz = AddGradient(result, IN.tex0.xy);
-
-    // Calculate Luminance
-    float luminance = dot(result.xyz, LUMINANCE_VECTOR);
 
     // NIS fade
     if (doColourFade)
@@ -916,8 +947,8 @@ float4 PS_VisualTreatment(const VtoP IN, uniform bool doDepthOfField, uniform bo
     blendColor = lerp(result.xyz, blendColor1, blendAmount1);
     result.xyz = lerp(result.xyz, luminance * 1.5, blendColor * BREAKER_INTENSITY); 
 
-    // Apply Brightness Adjustment
-    result.rgb *= BRIGHTNESS;
+    // Lens contamination gradient effect 
+    result.xyz = AddGradient(result, IN.tex0.xy);
 
     return result;
 }
