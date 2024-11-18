@@ -35,9 +35,11 @@ This is a shader mod that completely changes how the game Looks and feel.
 **List of what added and changed:**
 -----------------------------------------------------------------------------------------------
 - better Motionblur: Utalizes motionvectors now
+  - made it more nuanced
 - added a simple DOF-shader
   - (new!) fixed (now actually applies DOF)
 - added reimagined "HDR"
+  - fixed, now behaves like actual FakeHDR
 - added ambient-lighting
 - added Vignette
 - added ACES2 and FILMIC tonemaps (ACES2 activated at beginning, you can Change it)
@@ -49,8 +51,11 @@ This is a shader mod that completely changes how the game Looks and feel.
 - (new!) added Color desaturation shader
 - (new!) made cliff fall, cop intro and speedbreaker effects editable
 - (new!) added Fog Shader (currently nor recommended to use, use FogOptions instead: https://nfsmods.xyz/mod/729)
+- (new!) added some more controls in "visualtreatment.fx"
 - (new!) added standalone colorgrading
 - (new!) added color temperature adjustment
+- (new!) re-added pauseblur
+- (new!) added brightness and contrast control
 -----------------------------------------------------------------------------------------------
 - balanced brightness-levels for Luma 709
 - improved code Performance
@@ -63,10 +68,10 @@ This is a shader mod that completely changes how the game Looks and feel.
 
 !! YOU HAVE PERMISSION TO SHARE AND USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
 
-
-![Thumbnail0](https://github.com/user-attachments/assets/fd2df166-2f18-443b-9a31-24dad3d113c2)
-![Screenshot 2024-11-03 023344](https://github.com/user-attachments/assets/813bed66-8bca-42de-b997-4e7a9c1664ce)
-![Need for Speed™ Carbon 22 10 2024 01_35_57](https://github.com/user-attachments/assets/674f60a2-7aa9-479b-8503-dd7797587671)
-![Screenshot 2024-10-18 023836](https://github.com/user-attachments/assets/935f75f6-26cb-4455-82d8-c116ee0a2666)
+![Thumbnail0](https://github.com/user-attachments/assets/da2f4d2a-6f8e-4c33-ab24-9546ba52b2e6)
+![Screenshot0](https://github.com/user-attachments/assets/fd2df166-2f18-443b-9a31-24dad3d113c2)
+![Screenshot1](https://github.com/user-attachments/assets/813bed66-8bca-42de-b997-4e7a9c1664ce)
+![Screenshot2](https://github.com/user-attachments/assets/674f60a2-7aa9-479b-8503-dd7797587671)
+![Screenshot3](https://github.com/user-attachments/assets/935f75f6-26cb-4455-82d8-c116ee0a2666)
 
 
