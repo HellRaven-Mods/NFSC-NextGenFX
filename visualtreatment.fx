@@ -36,8 +36,12 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Brightness Adjustment
-// if image maybe too dark, incraese slowly
-#define BRIGHTNESS 1.00
+// if image maybe too dark, incraese slowly (opposite if too bright)
+#define BRIGHTNESS 0.8
+
+// Contrast
+// increase/decrease to your liking 
+#define CONTRAST 0.9
 
 // Cop Intro Color
 #define INTRO_COLOR float3(0.4, 0.0, 0.0)                       // Sets the color
@@ -58,54 +62,60 @@
 
 // Fake HDR
 #define USE_HDR
-#define FAKEHDR_POWER 1.200                                     // Intensity of the HDR effect
+#define FAKEHDR_POWER 1.500                                     // Intensity of the HDR effect
 #define FAKEHDR_RADIUS1 0.800                                   // Sets inner fade radius
 #define FAKEHDR_RADIUS2 0.800                                   // Sets outter fade radius
 
-// Colorgrading for Fake HDR
-// for best results in colorgrading, turn off "USE_LUT" first
-#define RED_CHANNEL     float3(2.000f, 0.100f, 0.100f)          // red level
-#define GREEN_CHANNEL   float3(0.100f, 2.000f, 0.100f)          // green level
-#define BLUE_CHANNEL    float3(0.100f, 0.100f, 2.000f)          // blue level
+// Color Grading
+#define RED_CHANNEL   float3(1.100, 0.000, 0.000)
+#define GREEN_CHANNEL float3(0.000, 1.200, 0.000)
+#define BLUE_CHANNEL  float3(0.000, 0.000, 1.300)
+
+// Color Temperatur
+#define COLOR_TEMPERATURE -0.1                                  // Temperature > 0 for warmer, < 0 for cooler
 
 // Desatuartion
 // if colors too powerfull
 #define USE_DESATURATION 
-#define DESATURATION_AMOUNT 0.00                                 // 0.0 = no desaturation, 1.0 = full desaturation
+#define DESATURATION_AMOUNT 0.10                                // 0.0 = no desaturation, 1.0 = full desaturation
 
 // Sharpening
 // put "//" infront of the "#define USE_SHARPEN" function to disable 
 #define USE_SHARPEN
-#define SHARPEN_AMOUNT 20.00f                                    // Intensity of the sharpening effect (too high values make game look bad) 
+#define SHARPEN_AMOUNT 20.00f                                   // Intensity of the sharpening effect (too high values make game look bad) 
 
 // Vignette
 // put "//" infront of the "#define USE_VIGNETTE" function to disable 
 //#define USE_VIGNETTE
-#define VIGNETTE_AMOUNT 0.6                                      // Intensity of vignette
-#define VIGNETTE_RADIUS 1.55                                     // Radius for vignette (determines if effects gets applied as circle, eclipse etc)
-#define VIGNETTE_CURVE 2.6                                       // sets the fade length
+#define VIGNETTE_AMOUNT 0.7                                     // Intensity of vignette
+#define VIGNETTE_RADIUS 1.75                                    // Radius for vignette (determines if effects gets applied as circle, eclipse etc)
+#define VIGNETTE_CURVE 2.6                                      // sets the fade length
 
 // Ambient Lighting
 // put "//" infront of the "#define USE_AMBIENTLIGHT" function to disable 
 #define USE_AMBIENTLIGHT
-#define Ambient_Intensity 0.150                                  // Intensity of ambient light                    
-#define Ambiennt_Color  float3(0.4, 0.45, 0.5)                   // Color of ambient light
+#define Ambient_Intensity 0.150                                 // Intensity of ambient light                    
+#define Ambiennt_Color  float3(0.4, 0.45, 0.5)                  // Color of ambient light
 
 // BLOOM
 // put "//" infront of the "#define USE_BLOOM" function to disable 
 #define USE_BLOOM
+#define BLOOM_INTENSITY 1.15                                    // Intensity of vignette
 
 // Chromatic Abberation
 // put "//" infront of the "#define USE_ABBERATION" function to disable 
 #define USE_ABBERATION
+#define ABBERATION_STRENTGH 0.015                               // recommended to keep range from 0.000 to 0.030
 
 // Camera Distortion
 // put "//" infront of the "#define USE_DISTORTIAN" function to disable
 #define USE_DISTORTION
+#define DISTORTION_STRENGTH 0.05                                // recommended to keep range from 0.00 to 0.01
 
 // Film-Grain
 // put "//" infront of the "#define USE_FILMGRAIN" function to disable 
 #define USE_FILMGRAIN
+#define FILM_GRAIN_STRENGTH 0.035
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // dont edit these
