@@ -31,7 +31,7 @@ static const float FuzzWidth = 0.5f;
 static const float magnitude_debug = 1.0;
 
 static const float MaxParticleSize = 1.2f;
-static const float MaterialShininess = 8;
+static const float MaterialShininess = 100;
 
 // these should be artist controlled	
 float3 ambient_colour = float3(0.4, 0.45, 0.5);
@@ -290,52 +290,61 @@ VtoP_NormalMapped vertex_shader_particles(const VS_INPUT IN)
 
 PS_OUTPUT pixel_shader_particles(const VtoP_NormalMapped IN)
 {
-	PS_OUTPUT OUT;
-	float shadow = 1;
+    PS_OUTPUT OUT;
 
-	float4 baseColour = tex2D(DIFFUSE_SAMPLER, IN.tex) * IN.color;
+    // Sample base color and depth
+    float4 baseColour = tex2D(DIFFUSE_SAMPLER, IN.tex) * IN.color;
+    float depth = tex2D(HEIGHTMAP_SAMPLER, IN.tex1.xy).x;
 
-	float depth = tex2D(HEIGHTMAP_SAMPLER, IN.tex1.xy).x;
+    // Calculate depth-based transparency (optimized fuzzz)
+    float zFar = 10000;
+    float zNear = 0.5;
+    float Q = zFar / (zFar - zNear);
+    float zDist = (-Q * zNear / (depth - Q));
 
+    float depthBufferDistToParticle = IN.position2.z / IN.position2.w;
+    float distanceToParticle = (-Q * zNear / (depthBufferDistToParticle - Q));
 
-	float zFar = 10000;
-	float zNear = 0.5;
-	float Q = zFar / (zFar - zNear);
-	float zDist = (-Q * zNear / (depth - Q));
+    // Calculate normal map
+    float3 normal = tex2D(NORMALMAP_SAMPLER, IN.tex) * 2 - 1;
+    normal *= magnitude_debug;
 
-	float depthBufferDistToParticle = IN.position2.z / IN.position2.w;
-	float distanceToParticle = (-Q * zNear / (depthBufferDistToParticle - Q));
+    // Apply diffuse lighting
+    float3 toLight = normalize(IN.to_light_tan);
+    float nDotL = saturate(dot(normal, toLight));
+    float diffuseScale = 0.6;
+    float3 diffuseColour = (nDotL * IN.lightColor) * diffuseScale;
 
-	float distanceBetweenParticleAndGround = abs(zDist - distanceToParticle);
-    float fuzzz = ComputeFuzzz(IN);
+    // Add rim lighting
+    float rimFactor = pow(1 - nDotL, 1.5); // Soften rim transitions
+    float3 rimColour = rimFactor * IN.lightColor * 0.4;
 
-	// calculate the normal map
-	float3 normal = tex2D(NORMALMAP_SAMPLER, IN.tex) * 2 - 1;
-	normal = normal * magnitude_debug ;
+    // Add Fresnel effect
+    float3 viewDir = normalize(cvLocalEyePos - IN.position2.xyz);
+    float fresnel = pow(1.0 - saturate(dot(viewDir, normal)), 2.0); // Edge-based lighting
+    float3 fresnelColour = fresnel * IN.lightColor * 0.5;
 
-	// Apply diffuse lighting
-	float3 toLight = normalize(IN.to_light_tan);
-	float nDotL = saturate(dot(normal, toLight));
-	
-	// Add rim lighting
-    float rimAmount = 1 - nDotL;
-    rimAmount = pow(rimAmount, 1);
-    float3 rimColour = rimAmount * IN.lightColor;
+    // Randomization for particle variance
+    float randomFactor = frac(sin(dot(IN.tex.xy, float2(12.9898, 78.233))) * 43758.5453);
+    baseColour.rgb *= lerp(0.3, 0.6, randomFactor); // Slight brightness variance
 
-	float3 diffuseColour = nDotL * IN.lightColor;
-	
-	// specular calculations
-	float3 half_angle = normalize(IN.half_angle_tan);
-	float  nDotH = saturate(dot(normal, half_angle));
-	float3 MaterialSpecular = float3(1.2, 1.2, 1.2);
-	float3 specular = MaterialSpecular * pow(nDotH, MaterialShininess);
+    // Soft edges for particles
+    float2 texCoordsCentered = IN.tex.xy - 0.5; // Center UVs
+    float radialGradient = 1.0 - smoothstep(0.8, 1.0, length(texCoordsCentered));
+    baseColour.a *= radialGradient;
 
-	OUT.color.rgb = fuzzz * shadow * baseColour * (ambient_colour + diffuseColour + rimColour + specular);
-	OUT.color.a = baseColour.a * shadow * fuzzz;
+    // Simulate light scattering in smoke
+    float3 scattering = IN.lightColor * pow(nDotL, 0.8); // Approximate light scattering
+    float scatteringContribution = 0.2;
+    OUT.color.rgb = baseColour.rgb * (ambient_colour + diffuseColour + rimColour + fresnelColour) + scattering * scatteringContribution;
 
-	OUT.color.rgb = CompressColourSpace(OUT.color.rgb);
+    // Final transparency with depth fade
+    OUT.color.a = baseColour.a;
 
-	return OUT;
+    // Compress color space for better tonal range
+    OUT.color.rgb = CompressColourSpace(OUT.color.rgb);
+
+    return OUT;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -502,7 +511,8 @@ float4 pixel_shader_flares(const VtoP_FLARES IN) : COLOR
     // Check for overexposure and apply the effect
     if (result.r > overexposure_threshold || result.g > overexposure_threshold || result.b > overexposure_threshold)
     {
-        result.rgb *= overexposure_intensity; // Brighten the color
+        // Brighten the color
+        result.rgb *= overexposure_intensity; 
     }
 	
     return result;
@@ -514,15 +524,14 @@ float4 pixel_shader_flares(const VtoP_FLARES IN) : COLOR
 
 struct VtoP_SFLARES
 {
-	float4 position  : POSITION;
-	float4 color     : COLOR0;
-	float4 tex       : TEXCOORD0;
+    float4 position : POSITION;
+    float4 color : COLOR0;
+    float4 tex : TEXCOORD0;
 };
 
 VtoP_SFLARES vertex_shader_streak_flares(const VS_INPUT_FLARES IN)
 {
     VtoP_SFLARES OUT;
-	
 	// Offset the vertex by the particle size
     float3 right = cmWorldView._m00_m10_m20;
     float3 up = cmWorldView._m01_m11_m21;
@@ -534,6 +543,7 @@ VtoP_SFLARES vertex_shader_streak_flares(const VS_INPUT_FLARES IN)
 
     if (doStreakFlare > 0)
     {
+		//float cameraSpeed = cvBaseAlphaRef.y * 75.0;
         float cameraSpeed = cvBaseAlphaRef.y;
         float nosAmount = cvBaseAlphaRef.w;
 
@@ -557,22 +567,22 @@ VtoP_SFLARES vertex_shader_streak_flares(const VS_INPUT_FLARES IN)
         float4 currFrameOffset = mul(IN.position + float4(offsetWidth, offsetWidth, offsetWidth, 0), cmWorldViewProj);
         float currFrameSize = distance(currFrameOffset.xy, currFramePos.xy);
         float3 prevFrameDirTanget = normalize(prevFrameDir);
-		
+        
 		// Rotate by 90 degrees to get tangent
         prevFrameDirTanget.xy = prevFrameDirTanget.yx;
         prevFrameDirTanget.x = -prevFrameDirTanget.x;
         prevFrameDirTanget *= currFrameSize;
 
 		// Push the tex coord futher along the streak for longer streaks
-        float texUlength = saturate(length(prevFrameDir.xyz) / 0.3); // 0.3
+        float texUlength = saturate(length(prevFrameDir.xyz) / 0.1);
         tex.x = IN.size.x > 0 ? 1 / 256 : texUlength;
-        tex.y = IN.size.y > 0 ? cvBaseAlphaRef.z : cvBaseAlphaRef.z + 15.0f / 128.0f; // The v texcoord is calc in on the CPU
+        tex.y = IN.size.y > 0 ? cvBaseAlphaRef.z : cvBaseAlphaRef.z + 15.0f / 128.0f;
         tex.z = IN.size.x > 0 ? 0 : 1;
 
 		// Cap the screen size of any particle
-        pv = world_position(pv); // BUG - IF THIS ISNT HERE ITS NOT IN THE CAMERA
+        pv = world_position(pv);
         pv = IN.size.x > 0 ? currFramePos : prevFramePos;
-		
+        
 		// Adjust brightness for lower/higher speeds
         vertexColour *= saturate(cameraSpeed / 95);
 
@@ -582,7 +592,7 @@ VtoP_SFLARES vertex_shader_streak_flares(const VS_INPUT_FLARES IN)
     else
     {
 		// Push offscreen to clip
-        pv = 100;
+        pv = 1000;
     }
 
     OUT.position = pv;
@@ -593,12 +603,13 @@ VtoP_SFLARES vertex_shader_streak_flares(const VS_INPUT_FLARES IN)
     return OUT;
 }
 
+
 float4 pixel_shader_streak_flares(const VtoP_SFLARES IN) : COLOR
 {
-	float4 result = tex2D(DIFFUSE_SAMPLER, IN.tex);	
-	result *= IN.color;
+    float4 result = tex2Dbias(DIFFUSE_SAMPLER, IN.tex);;
+    result *= IN.color;
 	
-	return result;
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -698,7 +709,7 @@ technique streak_flares <int shader = 1;>
 {
     pass p0
     {
-        VertexShader = compile vs_1_1 vertex_shader_streak_flares();
+        VertexShader = compile vs_3_0 vertex_shader_streak_flares();
         PixelShader = compile ps_3_0 pixel_shader_streak_flares();
     }
 }
