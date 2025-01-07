@@ -64,7 +64,7 @@ This is a shader mod that completely changes how the game Looks and feel.
 - improved log to linear colorspace decompression
 - (BONUS) improved screenefect shader for better road reflections on Project Palmont
 -----------------------------------------------------------------------------------------------
-!! YOU HAVE PERMISSION TO CUSTOMIZE THE MOD AS LONG AS PROPS ARE GIVEN !!
+!! YOU DO NOT HAVE PERMISSION TO CUSTOMIZE THE MOD EXCEPT YOU ASK ME !!
 
 !! YOU HAVE PERMISSION TO SHARE AND USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
 
