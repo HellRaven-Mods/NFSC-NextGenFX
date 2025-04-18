@@ -23,9 +23,6 @@ This is a shader mod that completely changes how the game Looks and feel.
 - open "visualtreamtent.fx" from FX folder with VisualStudio/Code, NotePad+ or any Editor you want
 - Change the values to your preferations
 - (! IMPORTANT !) To see the changes you Need to go to Video Settings and Exit out again, that will reload the shaders
-	 - if u use SunRise: in SunRise.ini (scripts folder) set Shaderreload key to 35 (END Key), than you can reload with a keypress
-
- !! DO NOT TOUCH THE OTHER FILES OR YOU ELSE YOU CAN BRAKE THE MOD !!
 
 **List of what added and changed:**
 -----------------------------------------------------------------------------------------------
