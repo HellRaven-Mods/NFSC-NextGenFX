@@ -2,134 +2,116 @@
 // Visual Treatment
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Here you can put your screen resoluton
-// Important for Motion-Blur and some other effects
-#define SCREEN_WIDTH 2560.0f                                    // X-Axis resolution (eg. 1920, 2560, 3840...)
-#define SCREEN_HEIGHT 1440.0f                                   // Y-Axis resolution (eg. 1080, 1440, 2160...)
+//////////////////////////////////////////
+//-- 🔧 System / Global Settings --//
+//////////////////////////////////////////
+#define SCREEN_WIDTH 2560.0f    // X-Axis resolution (eg. 1920, 2560, 3840...)
+#define SCREEN_HEIGHT 1440.0f   // Y-Axis resolution (eg. 1080, 1440, 2160...)
+#define USE_LOG_TO_LINEAR 0     // 0 = OFF, 1 = ON; Convert from log space to linear space
 
-// Here you can toggle custom shaders all at once
-// put "//" infront of the "#define USE_EFFECTS" function to disable 
-#define USE_EFFECTS
+//////////////////////////////////////////
+//-- 🎛 Master Toggles / Pipeline --//
+//////////////////////////////////////////
+#define USE_POST_EFFECTS 1      // 0 = OFF, 1 = ON; Makes Post-Effects usable
+#define USE_LUT 0               // 0 = OFF, 1 = ON; Toggles In-Game LUT
 
-// Here you can toggle the Filter (Lut)
-// put "//" infront of the "#define USE_LUT" function to disable 
-#define USE_LUT
+//////////////////////////////////////////
+//-- 🌞 Basic Image Adjustments --//
+//////////////////////////////////////////
+#define BRIGHTNESS 0.95         // Adjusts Games Brightness
+#define CONTRAST 1.05           // Adjusts Games Contrast
 
-// DOF Shader
-// put "//" infront of the "#define USE_DOF" function to disable 
-#define USE_DOF
+//////////////////////////////////////////
+//-- 🎨 Tonemapping --//
+//////////////////////////////////////////
+#define USE_TONEMAPPING 1       // 0 = OFF, 1 = ON; Toggles Tonemapping
+#define TONEMAP_VARIANT 5       // 1 = Reinhard, 2 = ACES2, 3 = ACES Legacy, 4 = Uncharted2, 5 = Unreal, 6 = Lottes, 7 = Gran Turismo, 8 = Narkowicz 2015, 9 = AgX, 10 = FilmicALU, 11 = NFS Heat Style
+#define EXPOSURE_BIAS 0.30      // Defines Exposure-Bias for Tonemaps (needs adjustment on tonemap-change)
 
-// Here you can toggle the Color decompression
-// put "//" infront of the "#define" function to disable 
-#define USE_LOG_to_LINIAR
+//////////////////////////////////////////
+//-- 🌈 Color Grading & Look --//
+//////////////////////////////////////////
+#define COLOR_TEMPERATURE 0.05  // Color-Temperature > 0 for warmer, < 0 for cooler
+#define USE_PRESET 14           // 0 for User-Config (below), 1-19 to choose from preset.fx
 
-// FOG
-// put "//" infront of the "#define USE_FOG" function to disable 
-//#define USE_FOG
+#if USE_PRESET == 0
+// User-Config can be set here!
+    #define RED_CHANNEL   float3(1.0, 0.0, 0.0) // Sets Color in (r, g, b) for Red-Channel
+    #define GREEN_CHANNEL float3(0.0, 1.0, 0.0) // Sets Color in (r, g, b) for Green-Channel
+    #define BLUE_CHANNEL  float3(0.0, 0.0, 1.0) // Sets Color in (r, g, b) for Blue-Channel
 
-// PAUSE BLUR
-// delete "//" infront of the "#define DONTDOPAUSEBLUR" function to disable 
-//#define DONTDOPAUSEBLUR
+    #define LUMA   1.05         // Sets Color-Luminance
+    #define CHROMA 1.25         // Sets Color-Saturation
+#else
+    #include "MODULES/colorgrading_presets.fx"
+#endif
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Effect Config
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////
+//-- ✨ Glow & Bloom --//
+//////////////////////////////////////////
+#define USE_BLOOM 1             // 0 = OFF, 1 = ON; Toggles Bloom-Effect
+#define BLOOM_INTENSITY 0.35    // Sets Overall Bloom-Intensity
+#define BLOOM_RADIUS 10.00      // Sets Bloom Spread-Radius
 
-// Brightness Adjustment
-// if image maybe too dark, incraese slowly (opposite if too bright)
-#define BRIGHTNESS 0.8
+//////////////////////////////////////////
+//-- 📈 Curves & Legacy Stuff --//
+//////////////////////////////////////////
+#define USE_LEGACY_CURVES 1     // 0 = OFF, 1 = ON; Toggles Legacy-Curves from 360 Version (thx to Sh2dow)
 
-// Contrast
-// increase/decrease to your liking 
-#define CONTRAST 0.9
+//////////////////////////////////////////
+//-- 📸 Lens FX --//
+//////////////////////////////////////////
+#define USE_LENSDIRT 1           // 0 = OFF, 1 = ON; Toggles Lens-Dirt Effect
+#define LENS_DIRT_INTENSITY 1.1  // Sets Dirt-Intensity
 
-// Cop Intro Color
-#define INTRO_COLOR float3(0.4, 0.0, 0.0)                       // Sets the color
-#define INTRO_BLEND_AMOUNT 0.15                                 // Sets the blend amount (0= no blend, 1= full overblend)
+//////////////////////////////////////////
+//-- 🧠 Perception Tools --//
+//////////////////////////////////////////
+#define USE_HDR 1                   // 0 = OFF, 1 = ON; Toggles FakeHDR Effect
+#define FAKEHDR_POWER 1.275         // Sets FakeHDR Intensity
 
-// Cliff Fall Color
-#define CLIFF_COLOR float3(0.8, 0.8, 0.8)                       // Sets the color
-#define CLIFF_BLEND 1.00                                        // Sets the blend amount (0= no blend, 1= full overblend)
+#define USE_DESATURATION 0          // 0 = OFF, 1 = ON; Toggles Desaturation Effect
+#define DESATURATION_AMOUNT 0.00    // Sets Desaturation Intensity
 
-// Speed-breaker Effect
-#define SPEEDBREAKER_EFFECT_COLOR float3(0.8, 0.8, 0.8)         // Sets the color
-#define SPEEDBREAKER_EFFECT_BLEND 1.00                          // Sets the blend amount (0= no blend, 1= full overblend)
+#define USE_SHARPEN 1               // 0 = OFF, 1 = ON; Toggles Sharpen Effect
+#define SHARPEN_AMOUNT 0.05f        // Sets Sharpen Intensity
 
-// Comment the line you dont wanna use with "//"
-//// The tonemap that isnt commented will get applied
-#define USE_ACES2
-//#define USE_Filmic
+//////////////////////////////////////////
+//-- 🖼️ Aesthetic FX --//
+//////////////////////////////////////////
+#define USE_VIGNETTE 0              // 0 = OFF, 1 = ON; Toggles Vignette Effect
+#define VIGNETTE_AMOUNT 0.60        // Sets Vignette Intensity
+#define VIGNETTE_RADIUS 1.85        // Sets Vignette Spread Radius
+#define VIGNETTE_CURVE 2.25         // Sets Vignette Blend Curve
 
-// Fake HDR
-#define USE_HDR
-#define FAKEHDR_POWER 1.500                                     // Intensity of the HDR effect
-#define FAKEHDR_RADIUS1 0.800                                   // Sets inner fade radius
-#define FAKEHDR_RADIUS2 0.800                                   // Sets outter fade radius
+#define USE_ABERRATION 0            // 0 = OFF, 1 = ON; Toggles Aberration Effect
+#define ABERRATION_STRENGTH 0.005   // Sets Aberration Amount
 
-// Color Grading
-#define RED_CHANNEL   float3(1.100, 0.000, 0.000)
-#define GREEN_CHANNEL float3(0.000, 1.200, 0.000)
-#define BLUE_CHANNEL  float3(0.000, 0.000, 1.300)
+#define USE_FILMGRAIN 1             // 0 = OFF, 1 = ON; Toggles Filmgrain Effect
+#define FILM_GRAIN_STRENGTH 0.0125  // Sets Filmgrain Strenght
 
-// Color Temperatur
-#define COLOR_TEMPERATURE -0.1                                  // Temperature > 0 for warmer, < 0 for cooler
+//////////////////////////////////////////
+//-- 🎮 Ingame-Scenario Effects --//
+//////////////////////////////////////////
+#define USE_CUSTOM_CLIFF_EFFECT 1                           // 0 = OFF, 1 = ON; Toggles Custom Cliff Fall Effect
+#define CLIFF_COLOR float3(0.8, 0.8, 0.8)                   // Sets Color in (r, g, b)
+#define CLIFF_BLEND 1.00                                    // Sets Blend Amount (1 = max)
 
-// Desatuartion
-// if colors too powerfull
-#define USE_DESATURATION 
-#define DESATURATION_AMOUNT 0.10                                // 0.0 = no desaturation, 1.0 = full desaturation
+#define USE_CUSTOM_COP_ENGANGEMENT 1                        // 0 = OFF, 1 = ON; Toggles Custom Cop Engangement
+#define INTRO_BLEND_COLOR  float3(0.4, 0.0, 0.0)            // Sets Color in (r, g, b)
+#define INTRO_BLEND_AMOUNT 0.15                             // Sets Blend Amount (1 = max)
 
-// Sharpening
-// put "//" infront of the "#define USE_SHARPEN" function to disable 
-#define USE_SHARPEN
-#define SHARPEN_AMOUNT 20.00f                                   // Intensity of the sharpening effect (too high values make game look bad) 
-
-// Vignette
-// put "//" infront of the "#define USE_VIGNETTE" function to disable 
-//#define USE_VIGNETTE
-#define VIGNETTE_AMOUNT 0.7                                     // Intensity of vignette
-#define VIGNETTE_RADIUS 1.75                                    // Radius for vignette (determines if effects gets applied as circle, eclipse etc)
-#define VIGNETTE_CURVE 2.6                                      // sets the fade length
-
-// Ambient Lighting
-// put "//" infront of the "#define USE_AMBIENTLIGHT" function to disable 
-#define USE_AMBIENTLIGHT
-#define Ambient_Intensity 0.150                                 // Intensity of ambient light                    
-#define Ambiennt_Color  float3(0.4, 0.45, 0.5)                  // Color of ambient light
-
-// BLOOM
-// put "//" infront of the "#define USE_BLOOM" function to disable 
-#define USE_BLOOM
-#define BLOOM_INTENSITY 1.15                                    // Intensity of vignette
-
-// Chromatic Abberation
-// put "//" infront of the "#define USE_ABBERATION" function to disable 
-#define USE_ABBERATION
-#define ABBERATION_STRENTGH 0.015                               // recommended to keep range from 0.000 to 0.030
-
-// Camera Distortion
-// put "//" infront of the "#define USE_DISTORTIAN" function to disable
-#define USE_DISTORTION
-#define DISTORTION_STRENGTH 0.05                                // recommended to keep range from 0.00 to 0.01
-
-// Film-Grain
-// put "//" infront of the "#define USE_FILMGRAIN" function to disable 
-#define USE_FILMGRAIN
-#define FILM_GRAIN_STRENGTH 0.035
+#define USE_CUSTOM_SPEEDBREAKER 1                           // 0 = OFF, 1 = ON; Toggles Custom Speedbreaker
+#define SPEEDBREAKER_EFFECT_COLOR float3(0.8, 0.8, 0.8)     // Sets Color in (r, g, b)
+#define SPEEDBREAKER_EFFECT_BLEND 1.00                      // Sets Blend Amount (1 = max)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// dont edit these
+// 🧱 Internal Definitions (Dont Edit!!)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define Luma709 float3(0.2126, 0.7152, 0.0722)
 
 #include "global.h"
-#include "gradient.h"
 #include "visualtreatment.h"
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// dont edit these
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define DO_DOF(value)               value
 #define DO_COLOUR_FADE(value)		value
 
 technique visualtreatment
@@ -137,7 +119,7 @@ technique visualtreatment
 	pass p0
 	{
         VertexShader = compile vs_3_0 vertex_shader_passthru();
-        PixelShader = compile ps_3_0 PS_VisualTreatment(DO_DOF(false), DO_COLOUR_FADE(false));
+        PixelShader = compile ps_3_0 PS_VisualTreatment(DO_COLOUR_FADE(true));
     }
 }
 
@@ -146,7 +128,7 @@ technique visualtreatment_enchanced
 	pass p0
 	{
         VertexShader = compile vs_3_0 vertex_shader_passthru();
-        PixelShader = compile ps_3_0 PS_VisualTreatment(DO_DOF(true), DO_COLOUR_FADE(true));
+        PixelShader = compile ps_3_0 PS_VisualTreatment(DO_COLOUR_FADE(true));
     }
 }
 
@@ -194,4 +176,3 @@ technique screen_passthru
 		PixelShader	 = compile ps_3_0 PS_PassThru();
 	}
 }
-
