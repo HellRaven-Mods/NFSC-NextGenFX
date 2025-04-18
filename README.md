@@ -12,29 +12,6 @@ This is a shader mod that completely changes how the game Looks and feel.
 - Good Shit (idea for Fixing flare-rotation direction)
 - UNLOCALIZED (some ideas of how to fix certain szenarios)
 
-**How to set-up the mod:**
------------------------------------------------------------------------------------------------
-- delete FX folder (in game root Folder) if existing
-
-Vanilla install:
-- install widescreenfix and hdreflections first!
-- copy FX Folder, SCRIPTS Folder and dinput8.dll in game root Folder, replace files if asked for
-- install new Filters with Binary from "Filter" Folder (uninstaller also located there)
-- (Bonus) install new Flares from "Flares" Folder (uninstaller also located there), install VANILLA_INSTALL(or _UNSINSTALL) script with OGVI
-
-SunRise/REDUX Install:
-- copy FX and SCRIPTS Folder to game root Folder
-- replace files if any
-- (Bonus) Install new Flares from "Flares" Folder (uninstaller also located there)
-
-Emitter Overhaul:
-- make a backup of your global folder first
-- install each part by number with OGVI (ignore all errors if there are any, all is fine):
-  1.  emitterdata
-  2.  emittergroup
-  3.  simsurface
-  3.1 simsurface(W2C) (if Wolrd 2 Carbon mod is used)
-
 **How to customize the mod:**
 -----------------------------------------------------------------------------------------------
 - open "visualtreamtent.fx" from FX folder with VisualStudio/Code, NotePad+ or any Editor you want
@@ -61,8 +38,10 @@ Emitter Overhaul:
 - Color-Temperature Adjustment
 - Brightness and Contrast Control
 -----------------------------------------------------------------------------------------------
-!! YOU DO NOT HAVE PERMISSION TO CUSTOMIZE THE MOD EXCEPT YOU ASK ME !! 
-!! YOU ONLY HAVE PERMISSION TO USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !! 
+!! YOU DO NOT HAVE PERMISSION TO CUSTOMIZE THE MOD EXCEPT YOU ASK ME !!
+
+!! YOU ONLY HAVE PERMISSION TO USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
+
 !! YOU ONLY HAVE PERMISSION TO SHARE YOUR OWN CONFIG-FILE AND COLORGRADINGS !!
 
 ![Thumbnail0](https://github.com/user-attachments/assets/da2f4d2a-6f8e-4c33-ab24-9546ba52b2e6)
