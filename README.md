@@ -12,6 +12,12 @@ This is a shader mod that completely changes how the game Looks and feel.
 - Good Shit (idea for Fixing flare-rotation direction)
 - UNLOCALIZED (some ideas of how to fix certain szenarios)
 
+**How to set-up the mod:**
+-----------------------------------------------------------------------------------------------
+- delete FX folder (in game root Folder) if existing
+
+- copy FX Folder and SCRIPTS Folder in game root Folder, replace files if asked for
+
 **How to customize the mod:**
 -----------------------------------------------------------------------------------------------
 - open "visualtreamtent.fx" from FX folder with VisualStudio/Code, NotePad+ or any Editor you want
