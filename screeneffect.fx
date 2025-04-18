@@ -5,22 +5,24 @@
 #include "global.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Bloom
-// you can tune the bloom parameters here, recommended to first enable BLOOM_DEBUG in visualtreatment.fx
-// enter then exit video options to recompile shader
 
-#define BLOOM_EXPOSURE 1.5
-#define BLOOM_BRIGHTPASS_THRESHOLD 0.05
+shared float4 TextureOffset : TEXTUREANIMOFFSET;
 
 ///////////////////////////////////////////////////////////////////////////////
 
 static const int MAX_SAMPLES = 32; // Maximum texture grabs
+static const float BRIGHT_PASS_OFFSET = 10.0f; // Offset for BrightPass filter
 
 // Contains	sampling offsets used by the techniques 
 shared float4 cavSampleOffsets[MAX_SAMPLES] : cavSampleOffsets;
 shared float4 cavSampleWeights[MAX_SAMPLES] : cavSampleWeights;
 shared float4 cvBlurParams : cvBlurParams;
 shared float4 cvBaseAlphaRef : cvBaseAlphaRef; //BASEALPHAREF;
+
+shared float cfBrightPassThreshold : cfBrightPassThreshold;
+shared float cfAdaptedLum : cfAdaptedLum;
+shared float cfBloomScale : cfBloomScale;
+shared float cfMiddleGray : cfMiddleGray;
    
 static const float3 LUMINANCE_VECTOR = float3(0.2125f, 0.7154f, 0.0721f);
 
@@ -118,6 +120,48 @@ VtoP vertex_shader_passthru(const VS_INPUT_SCREEN IN)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+
+float4 PS_ReflectionBlur(const VtoP IN) : COLOR
+{
+    float4 sample = 0;
+
+    sample += cavSampleWeights[0] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[0].xy);
+    sample += cavSampleWeights[1] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[1].xy);
+    sample += cavSampleWeights[2] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[2].xy);
+    sample += cavSampleWeights[3] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[3].xy);
+    sample += cavSampleWeights[4] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[4].xy);
+    sample += cavSampleWeights[5] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[5].xy);
+    sample += cavSampleWeights[6] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[6].xy);
+    sample += cavSampleWeights[7] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[7].xy);
+    sample += cavSampleWeights[8] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[8].xy);
+    sample += cavSampleWeights[9] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[9].xy);
+    sample += cavSampleWeights[10] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[10].xy);
+    sample += cavSampleWeights[11] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[11].xy);
+    sample += cavSampleWeights[12] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[12].xy);
+    sample += cavSampleWeights[13] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[13].xy);
+    sample += cavSampleWeights[14] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[14].xy);
+    sample += cavSampleWeights[15] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[15].xy);
+    sample += cavSampleWeights[16] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[16].xy);
+    sample += cavSampleWeights[17] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[17].xy);
+    sample += cavSampleWeights[18] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[18].xy);
+    sample += cavSampleWeights[19] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[19].xy);
+    sample += cavSampleWeights[20] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[20].xy);
+    sample += cavSampleWeights[21] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[21].xy);
+    sample += cavSampleWeights[22] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[22].xy);
+    sample += cavSampleWeights[23] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[23].xy);
+    sample += cavSampleWeights[24] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[24].xy);
+    sample += cavSampleWeights[25] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[25].xy);
+    sample += cavSampleWeights[26] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[26].xy);
+    sample += cavSampleWeights[27] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[27].xy);
+    sample += cavSampleWeights[28] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[28].xy);
+    sample += cavSampleWeights[29] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[29].xy);
+    sample += cavSampleWeights[30] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[30].xy);
+    sample += cavSampleWeights[31] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[31].xy);
+
+    return sample * 0.75;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 float4 GetBase(float2 texUV)
 {
     float4 base = tex2D( DIFFUSE_SAMPLER, texUV );
@@ -156,31 +200,6 @@ float4 PS_GaussBlur5x5(	const VtoP IN )	: COLOR
 
 ///////////////////////////////////////////////////////////////////////////////
 
-float4 PS_Bloom( const VtoP	IN ) : COLOR
-{
-    float4 sample = 0;
-
-    sample += cavSampleWeights[0] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[0].xy);
-    sample += cavSampleWeights[1] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[1].xy);
-    sample += cavSampleWeights[2] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[2].xy);
-    sample += cavSampleWeights[3] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[3].xy);
-    sample += cavSampleWeights[4] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[4].xy);
-    sample += cavSampleWeights[5] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[5].xy);
-    sample += cavSampleWeights[6] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[6].xy);
-    sample += cavSampleWeights[7] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[7].xy);
-    sample += cavSampleWeights[8] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[8].xy);
-    sample += cavSampleWeights[9] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[9].xy);
-    sample += cavSampleWeights[10] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[10].xy);
-    sample += cavSampleWeights[11] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[11].xy);
-    sample += cavSampleWeights[12] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[12].xy);
-    sample += cavSampleWeights[13] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[13].xy);
-    sample += cavSampleWeights[14] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[14].xy);
-
-    return sample * 0.4; // * 1.5
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 float4 PS_DownScale4x4(in float2 vScreenPosition : TEXCOORD0) : COLOR
 {
     const int SAMPLE_COUNT = 16; // Define the number of samples
@@ -208,6 +227,8 @@ float4 PS_DownScale4x4(in float2 vScreenPosition : TEXCOORD0) : COLOR
     return sample / SAMPLE_COUNT; // Return the averaged sample
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 float4 PS_DownScale2x2(in float2 vScreenPosition : TEXCOORD0) : COLOR
 {
     const int SAMPLE_COUNT = 4; // Define the number of samples
@@ -223,69 +244,123 @@ float4 PS_DownScale2x2(in float2 vScreenPosition : TEXCOORD0) : COLOR
     return sample / SAMPLE_COUNT; // Return the averaged sample
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 float4 PS_DownScale2x2ForMotionBlur(in float2 vScreenPosition : TEXCOORD0) : COLOR
 {
-    // Sample the color and depth at the given screen position
+    // Sample color and depth
     float4 sample = tex2D(DIFFUSE_SAMPLER, vScreenPosition);
     float depth = tex2D(DEPTHBUFFER_SAMPLER, vScreenPosition).x;
 
-    // Apply motion blur based on the alpha channel
-    sample.xyz += sample.w * sample.xyz; // Accumulate color based on alpha
+    // Fix: Ensure motion blur intensity is stable
+    float motionStrength = sample.w * 0.75; // Reduce aggressive motion blur accumulation
+    sample.xyz = lerp(sample.xyz, sample.xyz * (1.0 + motionStrength), 0.5);
 
-    // Distance falloff parameters
+    // Distance falloff settings
     const float DIST_FALLOFF_START = cvBlurParams.x; // meters
     const float DIST_FALLOFF_END = cvBlurParams.y * 200; // meters
-    const float SLOPE = -1.0 / (DIST_FALLOFF_END - DIST_FALLOFF_START); // slope: how rapid the fall off is
-    const float INTERCEPT = -DIST_FALLOFF_END * SLOPE; // y-intercept for depth mapping
 
-    // Transform depth to a more usable form
-    depth = saturate((1.0 / (1.0 - depth)) * SLOPE + INTERCEPT); // Invert and scale depth
+    // Fix: More stable depth transformation
+    float depthFactor = 1.0 / max(0.0001, (1.0 - depth)); // Prevent divide by zero
+    float slope = -1.0 / (DIST_FALLOFF_END - DIST_FALLOFF_START);
+    float intercept = -DIST_FALLOFF_END * slope;
+    
+    // Stabilized depth-based motion blur scaling
+    depth = saturate(depthFactor * slope + intercept);
 
-    // Set the alpha channel to the computed depth
-    sample.w = depth;
+    // Output the corrected depth
+    sample.w = saturate(depth);
 
-    return sample; // Return the modified sample
+    return sample;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Bloom
+///////////////////////////////////////////////////////////////////////////////
+
+#define BLOOM_EXPOSURE 0.40
+#define BLOOM_BRIGHTPASS_THRESHOLD 0.375
+
+float3 tonemap(float3 col, float exposure)
+{
+    const float A = 0.220;
+    const float B = 0.500;
+    const float C = 0.100;
+    const float D = 0.200;
+    const float E = 0.015;
+    const float F = 0.200;
+    const float W = 11.20;
+
+    col *= exposure;
+
+    col = ((col * (A * col + C * B) + D * E) / (col * (A * col + B) + D * F)) - E / F;
+    const float white = 1.0 / (((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - E / F);
+    col *= white;
+    return col;
 }
 
 float4 PS_DownScaleForBloom(in float2 vScreenPosition : TEXCOORD0) : COLOR
 {
-    const float BRIGHT_PASS_SCALE = 0.5; // Scale factor for the sample
+    float3 bloomSum = 0.0;
+    
+    // Bloom settings
+    float blurStrength = 0.002; // You can increase for stronger blur
+    float2 blurDirection = float2(1.0, 0.0); // Directional blur (horizontal). Use float2(1,1) for radial.
 
-    // Initialize the sample color
-    float3 sample = 0;
-
-    // Manually unroll the loop
-    sample += cavSampleWeights[0] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[0].xy).xyz;
-    sample += cavSampleWeights[1] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[1].xy).xyz;
-    sample += cavSampleWeights[2] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[2].xy).xyz;
-    sample += cavSampleWeights[3] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[3].xy).xyz;
-    sample += cavSampleWeights[4] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[4].xy).xyz;
-    sample += cavSampleWeights[5] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[5].xy).xyz;
-    sample += cavSampleWeights[6] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[6].xy).xyz;
-    sample += cavSampleWeights[7] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[7].xy).xyz;
-    sample += cavSampleWeights[8] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[8].xy).xyz;
-    sample += cavSampleWeights[9] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[9].xy).xyz;
-    sample += cavSampleWeights[10] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[10].xy).xyz;
-    sample += cavSampleWeights[11] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[11].xy).xyz;
-    sample += cavSampleWeights[12] * tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[12].xy).xyz;
-
-    sample = DeCompressColourSpace(sample);
-
-    // Bright pass threshold processing
-    const float kBrightPassThreshold = BLOOM_BRIGHTPASS_THRESHOLD;
-    float maxChannel = max(max(sample.x, sample.y), sample.z) - kBrightPassThreshold;
-
-    // Early exit if below threshold
-    if (maxChannel < 0)
+    // Gaussian weights (normalize as needed)
+    const float weights[8] =
     {
-        return float4(sample * BRIGHT_PASS_SCALE, 0);
+        0.227027f, 0.1945946f, 0.1216216f, 0.054054f,
+        0.016216f, 0.005405f, 0.002f, 0.001f
+    };
+
+    // Sample center pixel first
+    float3 colorSample = tex2Dlod(DIFFUSE_SAMPLER, float4(vScreenPosition, 0, 1)).rgb;
+
+    // Bright-pass thresholding (soft)
+    float brightness = max(colorSample.r, max(colorSample.g, colorSample.b));
+    float threshold = BLOOM_BRIGHTPASS_THRESHOLD;
+    float knee = threshold * 0.75; // Controls softness of threshold falloff
+
+    float soft = clamp((brightness - threshold + knee) / (2.0 * knee), 0.0, 1.0);
+    float contribution = max(brightness - threshold, 0.0) + soft;
+
+    bloomSum += weights[0] * colorSample * contribution;
+    
+    // Loop for additional samples in blurDirection
+    for (int i = 1; i < 8; i++)
+    {
+        float offset = blurStrength * float(i);
+
+        // Positive offset sample
+        float2 samplePos1 = vScreenPosition + blurDirection * offset;
+        float3 color1 = tex2Dlod(DIFFUSE_SAMPLER, float4(samplePos1, 0, 1)).rgb;
+
+        float brightness1 = max(color1.r, max(color1.g, color1.b));
+        float soft1 = clamp((brightness1 - threshold + knee) / (2.0 * knee), 0.0, 1.0);
+        float contrib1 = max(brightness1 - threshold, 0.0) + soft1;
+
+        bloomSum += weights[i] * color1 * contrib1;
+
+        // Negative offset sample (symmetric blur)
+        float2 samplePos2 = vScreenPosition - blurDirection * offset;
+        float3 color2 = tex2Dlod(DIFFUSE_SAMPLER, float4(samplePos2, 0, 1)).rgb;
+
+        float brightness2 = max(color2.r, max(color2.g, color2.b));
+        float soft2 = clamp((brightness2 - threshold + knee) / (2.0 * knee), 0.0, 1.0);
+        float contrib2 = max(brightness2 - threshold, 0.0) + soft2;
+
+        bloomSum += weights[i] * color2 * contrib2;
     }
-
-    maxChannel = 2 * maxChannel / (kBrightPassThreshold + maxChannel);
-
-    // Combine sample with maxChannel
-    return float4(sample * BRIGHT_PASS_SCALE + sample * maxChannel, 0);
+    
+    // Optional: Tonemap the bloom result if you want it adjusted for LDR output.
+    bloomSum = CompressColourSpace(bloomSum);
+    bloomSum = tonemap(bloomSum, BLOOM_EXPOSURE);
+    
+    return float4(bloomSum, 1.0);
 }
+
+///////////////////////////////////////////////////////////////////////////////
 
 float4 PS_BlendTextures(in float2 vScreenPosition :	TEXCOORD0 )	: COLOR
 {
@@ -296,16 +371,7 @@ float4 PS_BlendTextures(in float2 vScreenPosition :	TEXCOORD0 )	: COLOR
     return result;
 }
 
-
-DepthSpriteOut PS_DepthSprite(in float2 vScreenPosition : TEXCOORD0 )
-{
-    DepthSpriteOut OUT;
-
-    OUT.colour = float4(tex2D( DIFFUSE_SAMPLER, vScreenPosition).xyz, 0);
-    OUT.depth  = tex2D( DEPTHBUFFER_SAMPLER, vScreenPosition).x;
-
-    return OUT;
-}
+///////////////////////////////////////////////////////////////////////////////
 
 float4 PS_CombineReflectionColourAndHeadlightAlpha(in float2 vScreenPosition :	TEXCOORD0 )	: COLOR
 {
@@ -318,6 +384,9 @@ float4 PS_CombineReflectionColourAndHeadlightAlpha(in float2 vScreenPosition :	T
 
     return result;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // PREP BUFFER SHADER
@@ -385,6 +454,8 @@ CompositeOut PS_CompositeSmoke(in float2 texCoord : TEXCOORD0)
     return OUT;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 technique CompositeSmoke
 {
     pass p0
@@ -408,7 +479,7 @@ technique TwoPassBlur
     pass p0
     {
         VertexShader = compile vs_3_0 vertex_shader_passthru();
-        PixelShader = compile ps_3_0 PS_Bloom();
+        PixelShader = compile ps_3_0 PS_ReflectionBlur();
     }
 }
 
@@ -463,15 +534,6 @@ technique BlendTextures
     {
         VertexShader = compile vs_3_0 vertex_shader_passthru();
         PixelShader = compile ps_3_0 PS_BlendTextures();
-    }
-}
-
-technique DepthSprite
-{
-    pass p0
-    {
-        VertexShader = compile vs_3_0 vertex_shader_passthru();
-        PixelShader = compile ps_3_0 PS_DepthSprite();
     }
 }
 
