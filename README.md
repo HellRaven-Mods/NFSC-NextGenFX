@@ -61,8 +61,8 @@ Emitter Overhaul:
 - Color-Temperature Adjustment
 - Brightness and Contrast Control
 -----------------------------------------------------------------------------------------------
-!! YOU DO NOT HAVE PERMISSION TO CUSTOMIZE THE MOD EXCEPT YOU ASK ME !!
-!! YOU ONLY HAVE PERMISSION TO USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
+!! YOU DO NOT HAVE PERMISSION TO CUSTOMIZE THE MOD EXCEPT YOU ASK ME !! 
+!! YOU ONLY HAVE PERMISSION TO USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !! 
 !! YOU ONLY HAVE PERMISSION TO SHARE YOUR OWN CONFIG-FILE AND COLORGRADINGS !!
 
 ![Thumbnail0](https://github.com/user-attachments/assets/da2f4d2a-6f8e-4c33-ab24-9546ba52b2e6)
