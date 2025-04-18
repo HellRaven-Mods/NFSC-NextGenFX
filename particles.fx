@@ -4,37 +4,41 @@
 
 #include "global.h"
 
-shared float4x4 cmWorldView			: cmWorldView; //WORLDVIEW
-shared float4x4 cmWorldMat			: cmWorldMat;  //local to world matrix
-shared float3	cvLocalEyePos		: cvLocalEyePos; //LOCALEYEPOS;
-shared float4	cvTextureOffset		: cvTextureOffset; //TEXTUREANIMOFFSET;
+shared float4x4 cmWorldView         : cmWorldView; //WORLDVIEW
+shared float4x4 cmWorldMat          : cmWorldMat; //local to world matrix
+shared float4 cmPrevWorldViewProj   : cmPrevWorldViewProj; //BASEALPHAREF;
 
-
-shared float cfBrightness			: cfBrightness; //STANDARD_BRIGHTNESS
-shared float4 cvLocalCenter			: cvLocalCenter; //LOCALCENTER;
-shared float4 cvBaseAlphaRef		: cvBaseAlphaRef; //BASEALPHAREF;
-shared float4 cvBlurParams			: cvBlurParams; //IS_MOTIONBLUR_VIGNETTED;
-shared float4 cmPrevWorldViewProj		: cmPrevWorldViewProj; //BASEALPHAREF;
-
-shared float  cfMipMapBias			: cfMipMapBias;
+shared float4 cvLocalCenter         : cvLocalCenter; //LOCALCENTER;
+shared float4 cvBaseAlphaRef        : cvBaseAlphaRef; //BASEALPHAREF;
+shared float4 cvBlurParams          : cvBlurParams; //IS_MOTIONBLUR_VIGNETTED;
 shared float4 cvFogColour           : cvFogColour;
+shared float3 cvLocalEyePos         : cvLocalEyePos; //LOCALEYEPOS;
+shared float4 cvTextureOffset       : cvTextureOffset; //TEXTUREANIMOFFSET;
 
-float4 cavLightColours[40] : cavLightColours;
-float4 cavLightPositions[40] : cavLightPositions;
+
+shared float cfMipMapBias           : cfMipMapBias;
+shared float cfBrightness           : cfBrightness; //STANDARD_BRIGHTNESS
+
+float4 cavLightColours[1]           : cavLightColours;
+float4 cavLightPositions[1]         : cavLightPositions;
+float4 cavLightDirections[10]       : REG_cavLightDirections;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Constants
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static const float FuzzWidth = 0.5f;
+static const float FuzzWidth = 0.15f;
 
-static const float magnitude_debug = 1.0;
+static const float magnitude_debug = 13.5;
+static const float MaxParticleSize = 2.5f;
 
-static const float MaxParticleSize = 1.2f;
-static const float MaterialShininess = 100;
+static const float MaterialShininess = 10000000;
+
+static const float3 MaterialSpecular = float3(1.2, 1.2, 1.2);
+static const float ParticleBrightness = 0.6;
 
 // these should be artist controlled	
-float3 ambient_colour = float3(0.4, 0.45, 0.5);
+static const float3 ambient_colour = float3(0.4, 0.45, 0.5);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Samplers
@@ -61,12 +65,13 @@ sampler OPACITY_SAMPLER = sampler_state	// rain alpha texture
 	DECLARE_MINFILTER(LINEAR)
 	DECLARE_MAGFILTER(LINEAR)
 };
+
 DECLARE_TEXTURE(DIFFUSEMAP_TEXTURE) // PC edit - these NEED to be here for the shader to work!
-sampler DIFFUSE_SAMPLER = sampler_state
+sampler DIFFUSE_SAMPLER : register(ps_2_0, s0) = sampler_state
 {
 	ASSIGN_TEXTURE(DIFFUSEMAP_TEXTURE)
-	AddressU = WRAP;
-	AddressV = WRAP;
+    AddressU = CLAMP;
+    AddressV = CLAMP;
 	DECLARE_MIPFILTER(LINEAR)
 	DECLARE_MINFILTER(LINEAR)
 	DECLARE_MAGFILTER(LINEAR)
@@ -76,8 +81,8 @@ DECLARE_TEXTURE(NORMALMAP_TEXTURE)
 sampler NORMALMAP_SAMPLER = sampler_state
 {
 	ASSIGN_TEXTURE(NORMALMAP_TEXTURE)
-	AddressU = WRAP;
-	AddressV = WRAP;
+    AddressU = WRAP;
+    AddressV = WRAP;
 	DECLARE_MIPFILTER(LINEAR)
 	DECLARE_MINFILTER(LINEAR)
 	DECLARE_MAGFILTER(LINEAR)
@@ -87,6 +92,11 @@ DECLARE_TEXTURE(HEIGHTMAP_TEXTURE)
 sampler HEIGHTMAP_SAMPLER = sampler_state
 {
 	ASSIGN_TEXTURE(HEIGHTMAP_TEXTURE)
+    AddressU = WRAP;
+    AddressV = WRAP;
+	DECLARE_MIPFILTER(LINEAR)
+	DECLARE_MINFILTER(LINEAR)
+	DECLARE_MAGFILTER(LINEAR)
 };
 
 DECLARE_TEXTURE(DEPTHBUFFER_TEXTURE) // needed for the PC
@@ -110,8 +120,7 @@ struct VS_INPUT
 	float4 color    : COLOR;
 	float4 tex		: TEXCOORD;
 	float4 size		: TEXCOORD1;
-	int4   light_index	: BLENDINDICES;
-	//int4   light_index	: TEXCOORD2;
+	int4   light_index	: TEXCOORD2;
 };
 
 struct VtoP_NormalMapped
@@ -149,35 +158,33 @@ struct VtoP_Depth
 // Build Rotation
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Build rotation matrix using Rodrigues' rotation formula
 float3x3 BuildRotate(float angle, float3 rotAxis)
 {
+    float sinA, cosA;
+    sincos(-angle, sinA, cosA);
+    float3 axis = rotAxis;
+
+    float x = axis.x;
+    float y = axis.y;
+    float z = axis.z;
+
+    float oneMinusCos = 1.0f - cosA;
+
     float3x3 m;
-    float2 sc;
-    sincos(angle, sc.x, sc.y);
-    float3 axis = normalize(rotAxis);
+    m[0][0] = cosA + x * x * oneMinusCos;
+    m[0][1] = x * y * oneMinusCos + z * sinA;
+    m[0][2] = x * z * oneMinusCos - y * sinA;
 
-    float3 cosAxis = (1.0f - sc.y) * axis;
-    float3 sinAxis = sc.x * axis;
-    m[0] = cosAxis.x * axis;
-    m[1] = cosAxis.y * axis;
-    m[2] = cosAxis.z * axis;
-    m[0][0] += sc.y;
-    m[0][1] += sinAxis.z;
-    m[0][2] -= sinAxis.y;
-    m[1][0] -= sinAxis.z;
-    m[1][1] += sc.y;
-    m[1][2] += sinAxis.x;
-    m[2][0] += sinAxis.y;
-    m[2][1] -= sinAxis.x;
-    m[2][2] += sc.y;
+    m[1][0] = y * x * oneMinusCos - z * sinA;
+    m[1][1] = cosA + y * y * oneMinusCos;
+    m[1][2] = y * z * oneMinusCos + x * sinA;
 
-    // Invert the result by transposing the matrix
-    float3x3 invM;
-    invM[0] = float3(m[0][0], m[1][0], m[2][0]);
-    invM[1] = float3(m[0][1], m[1][1], m[2][1]);
-    invM[2] = float3(m[0][2], m[1][2], m[2][2]);
+    m[2][0] = z * x * oneMinusCos + y * sinA;
+    m[2][1] = z * y * oneMinusCos - x * sinA;
+    m[2][2] = cosA + z * z * oneMinusCos;
 
-    return invM;
+    return m;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -205,144 +212,186 @@ float ComputeFuzzz(const VtoP_NormalMapped IN)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Tonemaps + Grading
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3 Uncharted2ToneMapping(float3 x)
+{
+    float A = 0.15;
+    float B = 0.50;
+    float C = 0.10;
+    float D = 0.20;
+    float E = 0.02;
+    float F = 0.30;
+
+    float exposure_bias = 7.0;
+    x *= exposure_bias;
+
+    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+float3 ApplyColorGradeParticles(float3 color)
+{
+    float3 tint = float3(1.7, 1.5, 1.9); // slightly blue
+    color *= tint;
+
+    // simple cross processing
+    color.r = pow(color.r, 1.1);
+    color.g = pow(color.g, 0.95);
+    color.b = pow(color.b, 1.05);
+
+    return color;
+}
+
+float3 ApplyColorGradeRain(float3 color)
+{
+    float3 tint = float3(1.2, 1.0, 1.9); // blue-ish
+    color *= tint;
+
+    // simple cross processing
+    color.r = pow(color.r, 1.1);
+    color.g = pow(color.g, 0.95);
+    color.b = pow(color.b, 1.05);
+
+    return color;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Particles
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 VtoP_NormalMapped vertex_shader_particles(const VS_INPUT IN)
 {
-	VtoP_NormalMapped OUT;
+    VtoP_NormalMapped OUT;
 	// Offset the vertex by the particle size
-	float3 right	= cmWorldView._m00_m10_m20;
-	float3 up		= cmWorldView._m01_m11_m21;
-	float3 facing	= cmWorldView._m02_m12_m22;
+    float3 right = cmWorldView._m00_m10_m20;
+    float3 up = cmWorldView._m01_m11_m21;
+    float3 facing = normalize(cvLocalEyePos - mul(IN.position, cmWorldMat).xyz);
 
 	// Rotate the up and right around the facing
-	float angle = IN.size.z;
-	if( angle > 0 )
-	{
-		float3x3 rotation = BuildRotate(angle, facing);
-		right = mul(right, rotation);
-		up	  = mul(up, rotation);
-	}
+    float angle = IN.size.z;
+    float3x3 rotation = BuildRotate(angle, facing);
+    right = mul(right, rotation);
+    up = mul(up, rotation);
 
 	// Add offset from particle midpoint to the outside vertices
-	float4 pv = IN.position;
-	float3 offset = right * IN.size.x + up * IN.size.y;
-	pv.xyz += offset;
+    float4 pv = IN.position;
+    float3 offset = right * IN.size.x + up * IN.size.y;
+    pv.xyz += offset;
 
 	// Cap the screen size of any particle
-	float4 worldCornerPos = pv;
-	pv = world_position(pv);
+    float4 worldCornerPos = pv;
+    pv = world_position(pv);
 
-	float3 pvn = pv.xyz/pv.w;
-	float4 pc = world_position(IN.position);
-	float3 pcn = pc.xyz/pc.w;
-	float size = distance(pvn.xy,pcn.xy);
-	float new_size = min(size, MaxParticleSize);
-	float scale = new_size/size;
-	pv = lerp(pc,pv,scale);
+    float3 pvn = pv.xyz / pv.w;
+    float4 pc = world_position(IN.position);
+    float3 pcn = pc.xyz / pc.w;
+    float size = distance(pvn.xy, pcn.xy);
+    float new_size = min(size, MaxParticleSize);
+    float scale = new_size / size;
+    pv = lerp(pc, pv, scale);
 
 	// Each particle is affected by one light in the light array
 	// Read which one it is:
-	int lightIndex = IN.light_index.x;
-	float3 lightPos = cavLightPositions[lightIndex].xyz; // PC edit - it uses arrays
+    int lightIndex = IN.light_index.x;
+    float3 lightPos = cavLightPositions[lightIndex].xyz; // PC edit - it uses arrays
 
-	float3 worldPos = mul(IN.position, cmWorldMat).xyz;
-	float3 toLightSource = normalize(lightPos - worldPos);
+    float3 worldPos = mul(IN.position, cmWorldMat).xyz;
+    float3 toLightSource = normalize(lightPos - worldPos);
 
 	// Create the matrix which transforms from world space to tangent space
-	float3 tangent = right;
-	float3 binormal = up;
-	float3 normal = -facing;
-	float3x3 matTSpace = transpose(float3x3( tangent, binormal, normal  ));
+    float3 tangent = right;
+    float3 binormal = up;
+    float3 normal = -facing;
+    float3x3 matTSpace = transpose(float3x3(tangent, binormal, normal));
 
-	OUT.to_light_tan.xyz = mul(toLightSource, matTSpace);
+    OUT.to_light_tan.xyz = mul(toLightSource, matTSpace);
     OUT.to_light_tan = saturate(1.0 - IN.size.w);
 
-	float3 toEyeWorld = normalize(cvLocalEyePos - worldPos);
-	float3 toEyeTan = mul(toEyeWorld, matTSpace);
-	
+    float3 toEyeWorld = normalize(cvLocalEyePos - worldPos);
+    float3 toEyeTan = mul(toEyeWorld, matTSpace);
+
 	// Calculate the half-angle vector for per-pixel specular
 	OUT.half_angle_tan = (toEyeTan + OUT.to_light_tan) * 0.5;
 
-	float3 lightColour = cavLightColours[lightIndex].xyz; // PC edit - it uses arrays
-	OUT.lightColor = lightColour;
+    float3 lightColour = float3(1, 1, 1); //cavLightColours[lightIndex].xyz; // PC edit - it uses arrays
+    OUT.lightColor = lightColour;
 
-	OUT.position = OUT.position2 = pv;
-	OUT.color = saturate(IN.color * 2);
+    OUT.position = OUT.position2 = pv;
+    OUT.color = saturate(IN.color * 2);
 
-	OUT.tex = IN.tex + cvTextureOffset;
+    OUT.tex = IN.tex + cvTextureOffset;
 
 	// Convert from screen space (-1 to 1) to texture coordinate space (0.0 to 1.0)
-	float distance = pv.z / pv.w;
-	OUT.tex1.x = (0.5 * pv.x / pv.w) + 0.5;
-	OUT.tex1.y = (-0.5 * pv.y / pv.w) + 0.5;
+    float distance = pv.z / pv.w;
+    OUT.tex1.x = (0.5 * pv.x / pv.w) + 0.5;
+    OUT.tex1.y = (-0.5 * pv.y / pv.w) + 0.5;
 
 	// Distance to the pixel in the depth buffer
-	OUT.tex1.z = distance;
+    OUT.tex1.z = distance;
 
 	// Calculate the distance from the particle to the camera in world coordinates
-	OUT.tex1.w = length(cvLocalEyePos - IN.position) ;
+    OUT.tex1.w = length(cvLocalEyePos - IN.position);
 
 
-	return OUT;
+    return OUT;
 }
 
 PS_OUTPUT pixel_shader_particles(const VtoP_NormalMapped IN)
 {
     PS_OUTPUT OUT;
 
-    // Sample base color and depth
+    // Sample and normalize the base color
     float4 baseColour = tex2D(DIFFUSE_SAMPLER, IN.tex) * IN.color;
-    float depth = tex2D(HEIGHTMAP_SAMPLER, IN.tex1.xy).x;
 
-    // Calculate depth-based transparency (optimized fuzzz)
-    float zFar = 10000;
-    float zNear = 0.5;
-    float Q = zFar / (zFar - zNear);
-    float zDist = (-Q * zNear / (depth - Q));
+    // Early exit for completely transparent particles
+    if (baseColour.a < 0.01)
+    {
+        OUT.color = float4(0, 0, 0, 0);
+        return OUT;
+    }
 
-    float depthBufferDistToParticle = IN.position2.z / IN.position2.w;
-    float distanceToParticle = (-Q * zNear / (depthBufferDistToParticle - Q));
+    // Compute fuzziness with a stability bias to prevent jittering
+    float fuzzz = saturate(ComputeFuzzz(IN) + 0.4);
 
-    // Calculate normal map
-    float3 normal = tex2D(NORMALMAP_SAMPLER, IN.tex) * 2 - 1;
-    normal *= magnitude_debug;
+    // Sample the normal map and normalize the result
+    float3 normal = normalize(tex2D(NORMALMAP_SAMPLER, IN.tex).xyz * 2.0 - 1.0);
 
-    // Apply diffuse lighting
+    // Lighting calculations
     float3 toLight = normalize(IN.to_light_tan);
     float nDotL = saturate(dot(normal, toLight));
-    float diffuseScale = 0.6;
-    float3 diffuseColour = (nDotL * IN.lightColor) * diffuseScale;
 
-    // Add rim lighting
-    float rimFactor = pow(1 - nDotL, 1.5); // Soften rim transitions
-    float3 rimColour = rimFactor * IN.lightColor * 0.4;
+    // Ambient light contribution
+    float3 ambient = ambient_colour * baseColour.rgb;
 
-    // Add Fresnel effect
-    float3 viewDir = normalize(cvLocalEyePos - IN.position2.xyz);
-    float fresnel = pow(1.0 - saturate(dot(viewDir, normal)), 2.0); // Edge-based lighting
-    float3 fresnelColour = fresnel * IN.lightColor * 0.5;
+    // Diffuse lighting
+    float3 diffuseColour = nDotL * IN.lightColor;
 
-    // Randomization for particle variance
-    float randomFactor = frac(sin(dot(IN.tex.xy, float2(12.9898, 78.233))) * 43758.5453);
-    baseColour.rgb *= lerp(0.3, 0.6, randomFactor); // Slight brightness variance
+    // Rim lighting for soft edges
+    float rimAmount = pow(1.0 - nDotL, 2.0); // Smoother falloff
+    float3 rimColour = rimAmount * IN.lightColor * 0.5; // Dampen rim intensity
 
-    // Soft edges for particles
-    float2 texCoordsCentered = IN.tex.xy - 0.5; // Center UVs
-    float radialGradient = 1.0 - smoothstep(0.8, 1.0, length(texCoordsCentered));
-    baseColour.a *= radialGradient;
+    // Specular highlights
+    float3 half_angle = normalize(IN.half_angle_tan);
+    float nDotH = saturate(dot(normal, half_angle));
+    float3 specular = MaterialSpecular * pow(nDotH, MaterialShininess);
 
-    // Simulate light scattering in smoke
-    float3 scattering = IN.lightColor * pow(nDotL, 0.8); // Approximate light scattering
-    float scatteringContribution = 0.2;
-    OUT.color.rgb = baseColour.rgb * (ambient_colour + diffuseColour + rimColour + fresnelColour) + scattering * scatteringContribution;
+    // Combine lighting components
+    float3 lighting = ambient + diffuseColour + rimColour + specular;
 
-    // Final transparency with depth fade
-    OUT.color.a = baseColour.a;
+    // Apply fuzziness and base color
+    float3 finalColor = fuzzz * baseColour.rgb * lighting;
 
-    // Compress color space for better tonal range
-    OUT.color.rgb = CompressColourSpace(OUT.color.rgb);
+    // Tone mapping for better color range
+    finalColor = Uncharted2ToneMapping(finalColor);
+
+    // Apply brightness adjustment with clamping to avoid over-brightening
+    finalColor *= saturate(ParticleBrightness);
+    finalColor = ApplyColorGradeParticles(finalColor);
+
+    // Output final color
+    OUT.color.rgb = finalColor;
+    OUT.color.a = baseColour.a; // Preserve alpha for blending
 
     return OUT;
 }
@@ -356,7 +405,7 @@ PS_OUTPUT pixel_shader_raindrop(const VtoP_NormalMapped IN) : COLOR
     PS_OUTPUT OUT;
 
     // Calculate shadow
-    float shadow = 0;
+    float shadow = 0.5;
 
     // Sample diffuse texture
     float4 baseColour = tex2D(DIFFUSE_SAMPLER, IN.tex) * IN.color * 2;
@@ -410,6 +459,7 @@ PS_OUTPUT pixel_shader_raindrop(const VtoP_NormalMapped IN) : COLOR
 
     // Combine colors
     OUT.color.rgb = fuzzz * shadow * baseColour * (ambient_colour + diffuseColour + specularColour + rimColour + specular);
+    OUT.color.rgb = ApplyColorGradeRain(OUT.color.rgb);
     OUT.color.a = baseColour.a * shadow * fuzzz;
 	
     return OUT;
@@ -503,8 +553,8 @@ float4 pixel_shader_flares(const VtoP_FLARES IN) : COLOR
 	
 	// Apply the color and alpha values
     float4 result = diffuse * IN.color;
-
-	// Define an overexposure threshold
+	
+    // Define an overexposure threshold
     float overexposure_threshold = 0.90; // Adjust this value as needed
     float overexposure_intensity = 1.75; // How much to brighten overexposed areas
 
@@ -512,9 +562,9 @@ float4 pixel_shader_flares(const VtoP_FLARES IN) : COLOR
     if (result.r > overexposure_threshold || result.g > overexposure_threshold || result.b > overexposure_threshold)
     {
         // Brighten the color
-        result.rgb *= overexposure_intensity; 
+        result.rgb *= overexposure_intensity;
     }
-	
+    
     return result;
 }
 
