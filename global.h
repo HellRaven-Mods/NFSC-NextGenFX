@@ -17,14 +17,14 @@ float4x4	cmWorldViewProj			: WorldViewProj;
 float4		cvScreenOffset			: cvScreenOffset;
 float4		cvVertexPowerBrightness : cvVertexPowerBrightness;
 
-float4 world_position( float4 screen_pos )
+float4 world_position(float4 screen_pos)
 {
-    float4 p = mul(screen_pos, cmWorldViewProj);  
+    float4 p = mul(screen_pos, cmWorldViewProj);
     p.xy += cvScreenOffset.xy * p.w;
     return p;
 }
 
-float4 screen_position( float4 screen_pos )
+float4 screen_position(float4 screen_pos)
 {
     screen_pos.xy += cvScreenOffset.xy;
     return screen_pos;
@@ -37,7 +37,7 @@ float4 CalcVertexColour(float4 colour)
     return result;
 }
 
-float3 ScaleHeadLightIntensity(float3 colour) 
+float3 ScaleHeadLightIntensity(float3 colour)
 {
     float3 result = colour * cvVertexPowerBrightness.z;
     return result;
@@ -45,18 +45,17 @@ float3 ScaleHeadLightIntensity(float3 colour)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // HDR Colour Space compression
+// Convert to a log or psudeo-log colour space to save high dynamic range data
 /////////////////////////////////////////////////////////////////////////////////////////
 
-float3 CompressColourSpace(float3 c)
+float3 CompressColourSpace(float3 colour)
 {
-    // filmic response, without implicit gamma
-    return (1 - (pow(1 - (c * 0.5), 2)));
+    return colour / (1.0f + colour);
 }
 
-float3 DeCompressColourSpace(float3 c)
+float3 DeCompressColourSpace(float3 compressed)
 {
-    // no curve removal at this time
-    return (c * 1.25);
+    return compressed / max(1e-5f, 1.0f - compressed);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
