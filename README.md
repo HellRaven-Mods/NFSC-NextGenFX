@@ -14,59 +14,56 @@ This is a shader mod that completely changes how the game Looks and feel.
 
 **How to set-up the mod:**
 -----------------------------------------------------------------------------------------------
-!! You will either need XANs shaderloader (recommended for better usability) or Extended Customization 4.0.1 by Archie !!
-!! when using EC4.0.1 you need to enable Custom shaders and compile FX files in the ini of EC !!
+- delete FX folder (in game root Folder) if existing
 
-**Xan Shaderloader:** https://github.com/xan1242/xnfs-shaderloader-carbon/releases/tag/1.0
+Vanilla install:
+- install widescreenfix and hdreflections first!
+- copy FX Folder, SCRIPTS Folder and dinput8.dll in game root Folder, replace files if asked for
+- install new Filters with Binary from "Filter" Folder (uninstaller also located there)
+- (Bonus) install new Flares from "Flares" Folder (uninstaller also located there), install VANILLA_INSTALL(or _UNSINSTALL) script with OGVI
 
-- create a folder named FX in game root directory
-- copy files into that FX folder
+SunRise/REDUX Install:
+- copy FX and SCRIPTS Folder to game root Folder
+- replace files if any
+- (Bonus) Install new Flares from "Flares" Folder (uninstaller also located there)
 
-**additional note:** The Shader is meant to be used with Project Palmont (https://nfsmods.xyz/mod/5165) but also works fine with the vanilla game
+Emitter Overhaul:
+- make a backup of your global folder first
+- install each part by number with OGVI (ignore all errors if there are any, all is fine):
+  1.  emitterdata
+  2.  emittergroup
+  3.  simsurface
+  3.1 simsurface(W2C) (if Wolrd 2 Carbon mod is used)
 
 **How to customize the mod:**
 -----------------------------------------------------------------------------------------------
-- open "visualtreamtent.fx" with VisualStudio/Code, NotePad+ or any Editor you want
+- open "visualtreamtent.fx" from FX folder with VisualStudio/Code, NotePad+ or any Editor you want
 - Change the values to your preferations
 - (! IMPORTANT !) To see the changes you Need to go to Video Settings and Exit out again, that will reload the shaders
+	 - if u use SunRise: in SunRise.ini (scripts folder) set Shaderreload key to 35 (END Key), than you can reload with a keypress
 
  !! DO NOT TOUCH THE OTHER FILES OR YOU ELSE YOU CAN BRAKE THE MOD !!
 
 **List of what added and changed:**
 -----------------------------------------------------------------------------------------------
-- better Motionblur: Utalizes motionvectors now
-  - made it more nuanced
-- added a simple DOF-shader
-  - (new!) fixed (now actually applies DOF)
-- added reimagined "HDR"
-  - fixed, now behaves like actual FakeHDR
-- added ambient-lighting
-- added Vignette
-- added ACES2 and FILMIC tonemaps (ACES2 activated at beginning, you can Change it)
-- added chromatic abberation shader
-- added sharpen shader
-- added Film-grain shader
-- (new!) added Bloom shader
-- (new!) added Camera Distortion shader
-- (new!) added Color desaturation shader
-- (new!) made cliff fall, cop intro and speedbreaker effects editable
-- (new!) added Fog Shader (currently nor recommended to use, use FogOptions instead: https://nfsmods.xyz/mod/729)
-- (new!) added some more controls in "visualtreatment.fx"
-- (new!) added standalone colorgrading
-- (new!) added color temperature adjustment
-- (new!) re-added pauseblur
-- (new!) added brightness and contrast control
------------------------------------------------------------------------------------------------
-- balanced brightness-levels for Luma 709
-- improved code Performance
-  - (new!) now only enabled effects get calculated, that way, we improve Performance alot
-- better particle shader for better Flares (bug seems to be fixed) and smoke
-- improved log to linear colorspace decompression
-- (BONUS) improved screenefect shader for better road reflections on Project Palmont
+- better Motionblur
+- reimagined "HDR"
+- Vignette
+- Tonemaps
+- Chromatic Aberration
+- Sharpen shader
+- Film-grain shader
+- Bloom shader
+- Color desaturation shader
+- Adjustable Cliff-Fall, Cop-Engangement and Speedbreaker Effects: for SunRise we use vanilla cop-intro
+- more Controls in "visualtreatment.fx"
+- Standalone Color Grading
+- Color-Temperature Adjustment
+- Brightness and Contrast Control
 -----------------------------------------------------------------------------------------------
 !! YOU DO NOT HAVE PERMISSION TO CUSTOMIZE THE MOD EXCEPT YOU ASK ME !!
-
-!! YOU HAVE PERMISSION TO SHARE AND USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
+!! YOU ONLY HAVE PERMISSION TO USE THE MOD IN MODPACKS AS LONG AS PROPS ARE GIVEN !!
+!! YOU ONLY HAVE PERMISSION TO SHARE YOUR OWN CONFIG-FILE AND COLORGRADINGS !!
 
 ![Thumbnail0](https://github.com/user-attachments/assets/da2f4d2a-6f8e-4c33-ab24-9546ba52b2e6)
 ![Screenshot0](https://github.com/user-attachments/assets/fd2df166-2f18-443b-9a31-24dad3d113c2)
