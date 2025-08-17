@@ -4,7 +4,7 @@
 /********************************************************************
 
 created:	2024/02/03
-updated:    2025/04/18
+updated:    2025/02/28
 filename: 	visualtreatment.h
 file base:	visualtreatment
 file ext:	h
@@ -34,7 +34,6 @@ shared float4 cvVisualEffectFadeColour              : cvVisualEffectFadeColour;
 
 // The per-color weighting to be used for luminance	calculations in	RGB	order.
 static const float3	LUMINANCE_VECTOR = float3(0.2126f, 0.7152f, 0.0722f);
-
 static const int MAX_SAMPLES = 16;	// Maximum texture grabs
 
 // Contains	sampling offsets used by the techniques 
@@ -46,6 +45,9 @@ shared float cfBloomScale                           : cfBloomScale;
 shared float cfMiddleGray                           : REG_cfMiddleGray;
 shared float cfBrightPassThreshold                  : REG_cfBrightPassThreshold;
 
+uniform float gAverageLuminance;
+uniform float gExposure;
+
 shared float4 Coeffs0                               : CURVE_COEFFS_0;
 shared float4 Coeffs1                               : CURVE_COEFFS_1;
 
@@ -55,13 +57,18 @@ shared float4 cvVisualTreatmentParams2              : cvVisualTreatmentParams2;
 shared float cfVisualEffectVignette                 : cfVisualEffectVignette;
 shared float cfVisualEffectBrightness               : cfVisualEffectBrightness;
 
+// Depth of Field variables
+shared float4 cvDepthOfFieldParams : cvDepthOfFieldParams; //DEPTHOFFIELD_PARAMS;
+shared bool cbDrawDepthOfField : cbDrawDepthOfField;
+shared bool cbDepthOfFieldEnabled : cbDepthOfFieldEnabled;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Samplers
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-texture CUSTOM_TEXTURE1;
+texture custom_tex1;
 sampler CUSTOM_SAMPLER = sampler_state
 {
-    Texture = <CUSTOM_TEXTURE1>;
+    Texture = <custom_tex1>;
     MinFilter = Linear;
     MagFilter = Linear;
     MipFilter = Linear;
@@ -69,15 +76,35 @@ sampler CUSTOM_SAMPLER = sampler_state
     AddressV = Clamp;
 };
 
-texture CUSTOM_TEXTURE2;
+texture custom_tex2;
 sampler CUSTOM_SAMPLER1 = sampler_state
 {
-    Texture = <CUSTOM_TEXTURE2>;
+    Texture = <custom_tex2>;
     MinFilter = Linear;
     MagFilter = Linear;
     MipFilter = Linear;
     AddressU = Clamp;
     AddressV = Clamp;
+};
+
+texture custom_tex3;
+sampler CUSTOM_SAMPLER2 = sampler_state
+{
+    Texture = <custom_tex3>;
+    MinFilter = Linear;
+    MagFilter = Linear;
+    MipFilter = Linear;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
+sampler SSAO_SAMPLER = sampler_state
+{
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+    MIPFILTER = LINEAR;
+    MINFILTER = LINEAR;
+    MAGFILTER = LINEAR;
 };
 
 DECLARE_TEXTURE(DIFFUSEMAP_TEXTURE)
@@ -86,7 +113,7 @@ sampler	DIFFUSE_SAMPLER = sampler_state
     ASSIGN_TEXTURE(DIFFUSEMAP_TEXTURE)
     AddressU = CLAMP;
     AddressV = CLAMP;
-    MIPFILTER = NONE;
+    MIPFILTER = LINEAR;
     MINFILTER = LINEAR;
     MAGFILTER = LINEAR;
 };
@@ -108,9 +135,20 @@ sampler	DEPTHBUFFER_SAMPLER = sampler_state
     ASSIGN_TEXTURE(DEPTHBUFFER_TEXTURE)
     AddressU = CLAMP;
     AddressV = CLAMP;
-    MIPFILTER = LINEAR;
+    MIPFILTER = NONE;
     MINFILTER = LINEAR;
     MAGFILTER = LINEAR;
+};
+
+DECLARE_TEXTURE(NORMALMAP_TEXTURE)
+sampler NORMALMAP_SAMPLER = sampler_state
+{
+    ASSIGN_TEXTURE(NORMALMAP_TEXTURE)
+    AddressU = WRAP;
+    AddressV = WRAP;
+    DECLARE_MIPFILTER(LINEAR)
+    DECLARE_MINFILTER(LINEAR)
+    DECLARE_MAGFILTER(LINEAR)
 };
 
 DECLARE_TEXTURE(VOLUMEMAP_TEXTURE)
@@ -152,6 +190,17 @@ sampler BLOOM_SAMPLER = sampler_state
     AddressU = CLAMP;
     AddressV = CLAMP;
     MIPFILTER = NONE;
+    MINFILTER = LINEAR;
+    MAGFILTER = LINEAR;
+};
+
+DECLARE_TEXTURE(MISCMAP6_TEXTURE)			
+sampler	MISCMAP6_SAMPLER = sampler_state
+{
+    ASSIGN_TEXTURE(MISCMAP6_TEXTURE)			
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+    MIPFILTER = LINEAR;
     MINFILTER = LINEAR;
     MAGFILTER = LINEAR;
 };
@@ -221,7 +270,7 @@ float4 PS_PassThru(const VtoP IN) : COLOR
     float4 OUT;
 
     float4 diffuse = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy);	// * IN;
-    OUT.xyz = diffuse;
+    OUT.xyz = diffuse.xyz;
     OUT.w = diffuse.w;
 
     return OUT;
@@ -233,6 +282,49 @@ struct PS_INPUT
     float4 tex0 : TEXCOORD0;
     float4 tex1 : TEXCOORD1;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Calculate Texelsize
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float2 texelSizeL0 = float2(1.0 / SCREEN_WIDTH, 1.0 / SCREEN_HEIGHT);
+float2 texelSizeL1 = float2(1.0 / (SCREEN_WIDTH / 2), 1.0 / (SCREEN_HEIGHT / 2));
+float2 texelSizeL2 = float2(1.0 / (SCREEN_WIDTH / 4), 1.0 / (SCREEN_HEIGHT / 4));
+float2 texelSizeL3 = float2(1.0 / (SCREEN_WIDTH / 8), 1.0 / (SCREEN_HEIGHT / 8));
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Bright-Pass
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float4 BrightPass(float2 texcoord : TEXCOORD0) : COLOR0
+{
+    float4 color = tex2D(DIFFUSE_SAMPLER, texcoord);
+
+    // Prefer global average if provided
+    float avgLum = max(gAverageLuminance, 1e-4);  // robust
+    float exposure = cfMiddleGray / avgLum;       // classic auto-exposure
+
+    float3 c = color.rgb * exposure;
+
+    // keep only highlights above threshold
+    float3 passed = max(c - cfBrightPassThreshold, 0.0);
+
+    return float4(passed, color.a);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Motionblur Quality Defines
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if MOTIONBLUR_QUALITY == 1
+static const int   SAMPLES = 16;
+static const float kWeights[SAMPLES] = { 2.6,1.5,1.4,1.3,1.2,1.1,1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.05 };
+static const float jitterAmount = 0.0035;
+#else
+static const int   SAMPLES = 8;
+static const float kWeights[SAMPLES] = { 2.0,1.75,1.5,1.25,1.0,0.75,0.5,0.25 };
+static const float jitterAmount = 0.0025;
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Generate Noise Texture
@@ -247,86 +339,38 @@ float generateNoise(float2 uv)
     const int OCTAVES = 4;
 
     [unroll]
-    for (int i = 0; i < OCTAVES; i++)
-    {
-       // Berechne einen "Seed" basierend auf der skalierten UV-Koordinate
-       float seed = dot(uv * frequency, float2(12.9898, 78.233));
-       // Erzeuge einen Pseudo-Zufallswert und mappe ihn von [0,1] nach [-1,1]
-       float noise = frac(sin(seed) * 43758.5453);
-       noise = noise * 2.0 - 1.0;
+        for (int i = 0; i < OCTAVES; i++)
+        {
+            float seed = dot(uv * frequency, float2(12.9898, 78.233));
+            float noise = frac(sin(seed) * 43758.5453);
+            noise = noise * 2.0 - 1.0;
 
-       total += noise * amplitude;
-       maxAmplitude += amplitude;
+            total += noise * amplitude;
+            maxAmplitude += amplitude;
 
-       // Für die nächste Oktave: Verdopple die Frequenz und halbiere die Amplitude
-       amplitude *= 0.5;
-       frequency *= 2.0;
-    }
+            amplitude *= 0.5;
+            frequency *= 2.0;
+        }
 
-    // Normiere das Ergebnis, sodass es stets im Bereich [-1,1] liegt
     return total / maxAmplitude;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Luminance-Sampling and Bright-Pass
+// Generate HQ Jitter
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float4 SampleLuminance(in float2 texcoord : TEXCOORD0) : COLOR
+float2 generateHQJitter(int index, float2 baseTex)
 {
-    float fLogLumSum = 0.0f;
-
-    for (int iSample = 0; iSample < 9; iSample++)
-    {
-        // Compute the sum of log(luminance) throughout	the	sample points
-        float4 vColor = tex2D(DIFFUSE_SAMPLER, texcoord + cavSampleOffsets[iSample].xy);
-        fLogLumSum += vColor.w;
-    }
-
-    // Divide the sum to complete the average
-    fLogLumSum /= 9;
-
-    return float4(fLogLumSum, fLogLumSum, fLogLumSum, 1.0f);
+    float angle = frac(sin(dot(baseTex * index, float2(12.9898, 78.233))) * 43758.5453) * 6.2831853;  // 2*PI
+    float radius = sqrt(max(float(index), 0.0001) / float(SAMPLES));
+    return float2(cos(angle), sin(angle)) * radius * jitterAmount;
 }
-
-float4 BrightPass(float2 texcoord : TEXCOORD0) : COLOR0
-{
-    float4 centerLum = tex2D(MISCMAP1_SAMPLER, float2(0.5f, 0.5f)).b;
-    float4 color = tex2D(DIFFUSE_SAMPLER, texcoord);
-
-    float lumAdapt = max(centerLum.x, cfMiddleGray);
-    lumAdapt += 0.001f;
-
-    float invLumAdapt = 1.0f / lumAdapt;
-    float exposure = cfMiddleGray * invLumAdapt;
-
-    float3 scaledColor = color.rgb * exposure;
-
-    float brightPass = max(max(scaledColor.r, scaledColor.g), scaledColor.b);
-    float threshold = brightPass - cfBrightPassThreshold;
-    threshold = max(threshold, 0.0f);
-    float brightPassFactor = (threshold + cfBrightPassThreshold) * (1.0f / (threshold + cfBrightPassThreshold));
-
-    scaledColor *= brightPassFactor * 0.1f;
-
-    return float4(scaledColor, color.w);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Calculate Texelsize
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-float2 texelSizeL0 = float2(1.0 / SCREEN_WIDTH, 1.0 / SCREEN_HEIGHT);
-float2 texelSizeL1 = float2(1.0 / (SCREEN_WIDTH / 2), 1.0 / (SCREEN_HEIGHT / 2));
-float2 texelSizeL2 = float2(1.0 / (SCREEN_WIDTH / 4), 1.0 / (SCREEN_HEIGHT / 4));
-float2 texelSizeL3 = float2(1.0 / (SCREEN_WIDTH / 8), 1.0 / (SCREEN_HEIGHT / 8));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Motion Blur
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Definitions
-static const float totalWeight = 8.5f;
-static const float kWeights[8] = { 2.0, 1.75, 1.5, 1.25, 1.0, 0.75, 0.5, 0.25 };
 static const float baseRampCoeff = 0.75; // Base coefficient, dynamically modulated
 
 // Motion Blur Vertex Shader
@@ -372,35 +416,39 @@ float4 PS_MotionBlur(const VtoP_MOTIONBLUR IN) : COLOR
 {
     float4 result = 0;
 
-    // Preload first sample
-    float4 firstSample = tex2D(MOTIONBLUR_SAMPLER, IN.tex[0]);
-    result += firstSample * (kWeights[0] / totalWeight);
+    float weightSum = 0.0;
+    [unroll] for (int wi = 0; wi < SAMPLES; wi++) weightSum += kWeights[wi];
 
-    // Jitter
-    float jitterAmount = 0.002;
-
-    // Optimized accumulation loop with jittering
     [unroll]
-    for (int i = 1; i < 8; i++)
+    for (int i = 0; i < SAMPLES; i++)
     {
-        // noise-based Offsets for X and Y:
-        float jitterX = generateNoise(IN.tex[i]);
-        float jitterY = generateNoise(IN.tex[i].yx + float2(5.2, 1.3));
-        float2 jitteredTex = IN.tex[i] + float2(jitterX, jitterY) * jitterAmount;
+    float2 baseTex = IN.tex[i % 8];
 
-        float4 blurSample = tex2D(MOTIONBLUR_SAMPLER, jitteredTex);
-        result += blurSample * (kWeights[i] / totalWeight);
+    #if MOTIONBLUR_QUALITY == 1
+        float2 jitteredTex = baseTex + generateHQJitter(i, IN.tex[0]);
+    #else
+        float jitterX = generateNoise(baseTex) * jitterAmount;
+        float jitterY = generateNoise(baseTex.yx + float2(5.2, 1.3)) * jitterAmount;
+        float2 jitteredTex = baseTex + float2(jitterX, jitterY);
+    #endif
+
+     // avoid sampling outside
+     jitteredTex = saturate(jitteredTex);
+
+     float4 sample = tex2D(MOTIONBLUR_SAMPLER, jitteredTex);
+     result += sample * kWeights[i];
     }
 
-    // Adaptive motion ramping to avoid flickering
+    result /= max(weightSum, 1e-5);
+
+    float4 firstSample = tex2D(MOTIONBLUR_SAMPLER, IN.tex[0]);
     float dynamicRampCoeff = saturate(baseRampCoeff + (firstSample.w * 0.25));
     result = lerp(firstSample, result, dynamicRampCoeff);
 
-    // Dithering
     float dither = generateNoise(IN.tex[0] * 123.456);
-    result.rgb += dither * 0.01;
+    result.rgb += dither * 0.008;
 
-    return result;
+    return saturate(result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -425,10 +473,17 @@ DepthSpriteOut PS_CompositeBlur(const VtoP IN)
     float4 blur = tex2D(MOTIONBLUR_SAMPLER, IN.tex0.xy);
     float4 screen = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy);
 
-    float4 vignette = tex2D(CUSTOM_SAMPLER1, float2(IN.tex1.x, IN.tex1.y * 1.2));
+    float2 scaledMaskUV = (IN.tex1.xy - 0.5) * MOTIONBLUR_MASK_SCALE + 0.5;
 
-    float motionBlurMask = -vignette.x + cvBlurParams.x;
-    float radialBlurMask = -vignette.y * cvBlurParams.y;
+#if MOTIONBLUR_QUALITY == 1
+    float4 vignette = tex2D(CUSTOM_SAMPLER2, scaledMaskUV);
+    float motionBlurMask = (-vignette.x) * cvBlurParams.x;
+    float radialBlurMask = (-vignette.y) + cvBlurParams.y;
+#else
+    float4 vignette = tex2D(CUSTOM_SAMPLER1, scaledMaskUV);
+    float motionBlurMask = (-vignette.x) + cvBlurParams.x;
+    float radialBlurMask = (-vignette.y) * cvBlurParams.y;
+#endif
 
     float finalMask = saturate(motionBlurMask + radialBlurMask);
 
@@ -442,176 +497,84 @@ DepthSpriteOut PS_CompositeBlur(const VtoP IN)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Fake HDR function - ported from ReShade, optimized by me
+// Fake HDR function - ported from ReShade but optimized by me
 // Not actual HDR - It just tries to mimic an HDR look
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if USE_HDR == 1
 float4 applyHDR(const VtoP IN, in float4 result)
 {
+    // Use a simple fake HDR bloom by sampling along eight directions around the current pixel. 
+    // Precomputed directions avoid expensive trig functions (cos/sin) inside the loop.
     float HDRPower = FAKEHDR_POWER;
-    float radius1 = 0.800;
-    float radius2 = 0.800;
+    float radius1  = 1.500;
+    float radius2  = 2.000;
 
-    float3 color = tex2Dbias(DIFFUSE_SAMPLER, IN.tex0);
+    float3 color = result.rgb;
 
-    float3 bloom_sum1 = 0;
-    float3 bloom_sum2 = 0;
+    float3 bloom_sum1 = float3(0.0, 0.0, 0.0);
+    float3 bloom_sum2 = float3(0.0, 0.0, 0.0);
 
-    for (int i = 0; i < 8; i++)
+    // Predefined unit circle directions to avoid cos/sin in the loop
+    static const float2 directions[8] = {
+        float2( 1.0,  0.0),
+        float2( 0.70710678,  0.70710678),
+        float2( 0.0,  1.0),
+        float2(-0.70710678,  0.70710678),
+        float2(-1.0,  0.0),
+        float2(-0.70710678, -0.70710678),
+        float2( 0.0, -1.0),
+        float2( 0.70710678, -0.70710678)
+    };
+
+    [loop]
+    for (int i = 0; i < 8; ++i)
     {
-        float angle = i * 3.14159 / 4.0;
-        float2 offset1 = float2(cos(angle), sin(angle)) * radius1;
-        float2 offset2 = float2(cos(angle), sin(angle)) * radius2;
-
-        bloom_sum1 += tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + offset1).rgb;
-        bloom_sum2 += tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + offset2).rgb;
+        float2 dir = directions[i];
+        bloom_sum1 += tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + dir * radius1).rgb;
+        bloom_sum2 += tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + dir * radius2).rgb;
     }
 
-    bloom_sum1 *= 0.125; // normalize (1 / 8 samples)
-    bloom_sum2 *= 0.125;
+    bloom_sum1 *= (1.0 / 8.0);
+    bloom_sum2 *= (1.0 / 8.0);
 
     float dist = radius2 - radius1;
-    float3 HDR = (color + (bloom_sum2 - bloom_sum1)) * dist;
-
+    float3 HDR  = (color + (bloom_sum2 - bloom_sum1)) * dist;
     float3 blend = HDR + color;
 
     // Protect against zero and NaN
     float3 safeBlend = max(abs(blend), 0.0001);
-    float3 hdrColor = blend * pow(safeBlend, HDRPower - 1.0) + HDR;
+    float3 hdrColor  = blend * pow(safeBlend, HDRPower - 1.0) + HDR;
 
     return float4(saturate(hdrColor), result.w);
 }
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Bloom Shader
+// Vanilla Depth Of Field
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if USE_BLOOM == 1
-float4 applyRadialBloom(float2 texCoord)
+float4 DoDepthOfField(const VtoP IN, in float4 result, float depth)
 {
-    float4 bloomSum = 0.0;
-    float weightSum = 0.0;
+    float zDist = (1 / (1 - depth));
+    float focalDist = cvDepthOfFieldParams.x;
+    float depthOfField = cvDepthOfFieldParams.y;
+    float falloff = cvDepthOfFieldParams.z;
+    float maxBlur = cvDepthOfFieldParams.w;
+    float blur = saturate((abs(zDist - focalDist) - depthOfField) * falloff / zDist);
+    float mipLevel = blur * maxBlur;
+    float3 blurredTex = tex2Dbias(MISCMAP6_SAMPLER, float4(IN.tex0.xy, 0, mipLevel)).rgb;
+    result = float4(lerp(result.xyz, blurredTex, saturate(mipLevel)), result.w);
 
-    for (int i = 0; i < 64; i++)
+    //result.xyz = saturate((abs(zDist-50)-30)*falloff/zDist);
+    if (cbDrawDepthOfField)
     {
-        float angle = (float(i) / 64) * 6.283185; // 360 degrees in radians  
-        float2 offset = float2(cos(angle), sin(angle)) * BLOOM_RADIUS * texelSizeL0;
-
-        float4 sampleBloom = tex2D(BLOOM_SAMPLER, texCoord + offset);
-
-        float weight = exp(-4.65 * length(offset) * 10.0); // Gaussian-style falloff  
-        bloomSum += sampleBloom * weight;
-        weightSum += weight;
+        result.x += (1 - blur) * 0.3;						// draw the depth of field falloff
+        result.xyz += (blur == 0.0f) ? 0.5 : 0.0f;	        // draw the crital focal point
     }
 
-    bloomSum /= weightSum; // Normalize bloom effect  
-    return saturate(bloomSum) * BLOOM_INTENSITY; // Apply intensity
-
+    return result;
 }
-
-float4 applyBloom(float2 texCoord)
-{
-    float4 diffuse = tex2D(DIFFUSE_SAMPLER, texCoord);
-    float4 bloom = tex2D(BLOOM_SAMPLER, texCoord);
-
-    float luminance = dot(diffuse.rgb, float3(0.2126, 0.7152, 0.0722));
-    float bloomStrength = smoothstep(10.7, 0.9, luminance);
-
-    return bloom * bloomStrength * 0.93;
-
-}
-#endif
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Color Temperatur
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-float3 adjustTemperature(float3 color, float temperature)
-{
-    // Adjust red and blue channels based on temperature parameter
-    color.r += temperature * 0.1;  // Temperature > 0 for warmer, < 0 for cooler
-    color.b -= temperature * 0.1;
-
-    return saturate(color);  // Ensure the color values are clamped between 0 and 1
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Color Grading & Split Toning + Contrast Adjustment
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-float3x3 colorMatrix = float3x3
-(
-    RED_CHANNEL,
-    GREEN_CHANNEL,
-    BLUE_CHANNEL
-);
-
-float3 applyColorGrading(float3 color)
-{
-    return saturate(mul(color, colorMatrix));
-}
-
-float3 applySplitToning(float3 color)
-{
-    // calculate luminance
-    float luminance = dot(color, LUMINANCE_VECTOR);
-
-    // define colors
-    float3 shadowTint = float3(0.2, 0.3, 0.7);      // blue-ish
-    float3 highlightTint = float3(1.0, 0.8, 0.6);   // gold/warm
-
-    // Smoothstep for soft stepping
-    float shadowAmount = saturate(1.0 - smoothstep(0.0, 0.5, luminance));
-    float highlightAmount = saturate(smoothstep(0.5, 1.0, luminance));
-
-    // mixing tones
-    color = lerp(color, shadowTint, shadowAmount * 0.15);
-    color = lerp(color, highlightTint, highlightAmount * 0.30);
-
-    return saturate(color);
-}
-
-float3 AdjustLumaChroma(float3 color, float lumaGain, float chromaGain)
-{
-    float luma = dot(color, LUMINANCE_VECTOR);
-    float3 gray = float3(luma, luma, luma); // neutral-grey based on luminance
-    float3 chroma = color - gray;           // chroma: difference between color and grey
-
-    // modified seperately
-    color = gray * lumaGain + chroma * chromaGain;
-
-    return saturate(color);
-}
-
-float3 AdjustContrast(float3 color, float contrast)
-{
-    // Shift color around 0.5 (mid-gray), apply contrast, shift back
-    return saturate((color - 0.5) * contrast + 0.5);
-}
-
-float3 processColor(float3 color)
-{
-    color = applyColorGrading(color);                // Grading (Matrix-based)
-    color = applySplitToning(color);                 // Optional: Split Toning
-    color = AdjustLumaChroma(color, LUMA, CHROMA);   // Luma/Chroma
-    color = AdjustContrast(color, CONTRAST);         // Contrast
-    return saturate(color);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Desaturation Shader
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if USE_DESATURATION == 1
-float4 applyDesaturation(float4 result, float amount)
-{
-    float luminance = dot(result.rgb, LUMINANCE_VECTOR); // Calculate Luminance
-    float3 desaturatedColor = lerp(result.rgb, float3(luminance, luminance, luminance), amount);
-    return float4(desaturatedColor, result.a); // Keep Alphachannel
-}
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Tonemap Shaders
@@ -644,7 +607,35 @@ float3 ApplyTonemap(float3 hdrColor)
     return Tonemap_FilmicALU(color);
 #elif TONEMAP_VARIANT == 11
     return Tonemap_NFSHeatStyle(color);
+#elif TONEMAP_VARIANT == 12
+    return Tonemap_Reinhard2(color);
+#elif TONEMAP_VARIANT == 13
+    return Tonemap_Uchimura(color);
 #endif
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Desaturation Shader
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if USE_DESATURATION == 1
+float4 applyDesaturation(float4 result, float amount)
+{
+    float luminance = dot(result.rgb, LUMINANCE_VECTOR); // Calculate Luminance
+    float3 desaturatedColor = lerp(result.rgb, float3(luminance, luminance, luminance), amount);
+    return float4(desaturatedColor, result.a); // Keep Alphachannel
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Subsurface-Like Diffusion
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3 applySubsurfaceBlur(const VtoP IN, float3 color)
+{
+    float2 offset = float2(0.002, 0); // horizontal spread
+    float3 blurred = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + offset).rgb;
+    return lerp(color, blurred, 0.07); // super subtle
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -669,9 +660,6 @@ float3 LegacyCurveTonemap(float3 color)
     // Compute curve normally
     float4 curve = curve1 * luminance + curve0;
 
-    // Debug output (optional, log somewhere in Reshade)
-    // color = float3(curve.x, curve.y, curve.z); // Uncomment to visualize the curve
-
     float3 adjustedColor = color * curve.xyz;
 
     // Debugging: Ensure colors never fully disappear
@@ -684,66 +672,182 @@ float3 LegacyCurveTonemap(float3 color)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Color Grading & Split Toning + Contrast Adjustment
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3x3 colorMatrix = float3x3
+(
+    RED_CHANNEL,
+    GREEN_CHANNEL,
+    BLUE_CHANNEL
+);
+
+float3 applyColorGrading(float3 color)
+{
+    return saturate(mul(color, colorMatrix));
+}
+
+    float3 applySplitToning(float3 color)
+    {
+        // calculate luminance
+        float luminance = dot(color, LUMINANCE_VECTOR);
+
+        // Smoothstep for soft stepping
+        float shadowAmount = saturate(1.0 - smoothstep(0.0, 0.5, luminance));
+        float highlightAmount = saturate(smoothstep(0.5, 1.0, luminance));
+
+    #if SPLIT_TONE == 0
+        // mixing tones
+        color = lerp(color, SHADOW_TINT, shadowAmount * 0.15);
+        color = lerp(color, HIGHLIGHT_TINT, highlightAmount * 0.30);
+
+    #elif SPLIT_TONE == 1
+        // define colors
+        float3 shadowTint = float3(0.2, 0.3, 0.7);      // blue-ish
+        float3 highlightTint = float3(1.0, 0.8, 0.6);   // gold/warm
+
+        // mixing tones
+        color = lerp(color, shadowTint, shadowAmount * 0.15);
+        color = lerp(color, highlightTint, highlightAmount * 0.30);
+    #endif
+
+        return saturate(color);
+    }
+
+float3 AdjustLumaChroma(float3 color, float lumaGain, float chromaGain)
+{
+    float luma = dot(color, LUMINANCE_VECTOR);
+    float3 gray = float3(luma, luma, luma); // neutral-grey based on luminance
+    float3 chroma = color - gray;           // chroma: difference between color and grey
+
+    // modified seperately
+    color = gray * lumaGain + chroma * chromaGain;
+
+    return saturate(color);
+}
+
+float3 AdjustContrast(float3 color, float contrast)
+{
+    // Shift color around 0.5 (mid-gray), apply contrast, shift back
+    return saturate((color - 0.5) * contrast + 0.5);
+}
+
+float3 processColor(float3 color)
+{
+    color = applyColorGrading(color);                // Grading (Matrix-based)
+    color = applySplitToning(color);                 // Optional: Split Toning
+    color = AdjustLumaChroma(color, LUMA, CHROMA);   // Luma/Chroma
+    color = AdjustContrast(color, CONTRAST);         // Contrast
+    return saturate(color);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Perceptual Highlight Softening
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3 softenHighlights(float3 c)
+{
+    float m = max(max(c.r, c.g), c.b);
+    float t = smoothstep(1.0, 1.5, m);   // knee onset
+    // compress instead of lerp-to-white
+    return c / (1.0 + t * m * 0.6);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Color Temperatur
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3 adjustTemperature(float3 color, float temperature)
+{
+    // temperature in [-1, +1] ≈ small shifts
+    float rScale = 1.0 + 0.10 * temperature;
+    float bScale = 1.0 - 0.10 * temperature;
+
+    float3 wb = float3(rScale, 1.0, bScale); // keep energy in check
+    return saturate(color * wb);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Sharpening Shader
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if USE_SHARPEN == 1
+
+float luminance(float3 color) 
+{
+    return dot(color, float3(0.299, 0.587, 0.114));
+}
+
 float4 applySharpen(const VtoP IN, float4 result)
 {
-    // Sample the neighboring pixels around the current pixel
-    float4 center = result;
-    float4 left = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy - float2(texelSizeL0.x, 0.0f));
-    float4 right = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + float2(texelSizeL0.x, 0.0f));
-    float4 top = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy - float2(0.0f, texelSizeL0.y));
-    float4 bottom = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy + float2(0.0f, texelSizeL0.y));
+    float2 uv = IN.tex0.xy;
 
-    // Calculate sharpening effect using a simple high-pass filter kernel
-    float4 sharpen = center * (1.0f + SHARPEN_AMOUNT) - (left + right + top + bottom) * (SHARPEN_AMOUNT / 4.0f);
+    // sample all from the same source (raw scene)
+    float3 c = tex2D(DIFFUSE_SAMPLER, uv).rgb;
+    float3 l = tex2D(DIFFUSE_SAMPLER, uv - float2(texelSizeL0.x, 0)).rgb;
+    float3 r = tex2D(DIFFUSE_SAMPLER, uv + float2(texelSizeL0.x, 0)).rgb;
+    float3 t = tex2D(DIFFUSE_SAMPLER, uv - float2(0, texelSizeL0.y)).rgb;
+    float3 b = tex2D(DIFFUSE_SAMPLER, uv + float2(0, texelSizeL0.y)).rgb;
 
-    // Blend the sharpen effect back into the original result
-    result.rgb = lerp(result.rgb, result.rgb + sharpen.rgb * 0.1, 0.1); // Adjust the blend factor to control the intensity
-    result.rgb = saturate(result.rgb); // Clamp values to maintain valid color ranges
+    float3 blur = (l + r + t + b + c) * (1.0 / 5.0);
+    float3 highpass = c - blur;
+    highpass = clamp(highpass, -0.25, 0.25); // keep symmetric edges
 
+    result.rgb = saturate(result.rgb + highpass * SHARPEN_AMOUNT);
     return result;
 }
 #endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Adaptive Whitebalance
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+float3 adaptiveWhiteBalance(float3 color)
+{
+    float3 sceneColor = color;
+
+    // Temperature proxy: Balance red against blue dominance
+    float tempShift = dot(sceneColor.rgb, float3(1.0, 0.0, -1.0));
+
+    // Apply automatic correction towards neutral white
+    float3 correction = float3(-tempShift, 0.0, tempShift) * 0.1;
+    color += correction;
+
+    // Optional green/magenta shift correction
+    float greenShift = sceneColor.g - ((sceneColor.r + sceneColor.b) * 0.5);
+    color.rg += float2(0.01, -0.01) * greenShift;
+
+    return saturate(color);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Chromatic Abberation
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if USE_ABERRATION == 1
-float4 applyChromaticAberration(const VtoP IN, float4 color) : COLOR
+// Tweakables
+static const float3 RGB_OFFSET = float3(1.0, 0.0, -1.0);
+
+float4 applyNosChromaticAberration(const VtoP IN, in float4 result) : COLOR
 {
-    // Constants
-    static const float EDGE_THRESHOLD = 0.02;
-    static const float EDGE_RANGE = 0.8;
-    static const float EDGE_BLEND_START = 0.4;
-    static const float EDGE_BLEND_END = 0.9;
+    float2 uv = IN.tex0.xy;
+    float2 center = float2(0.5, 0.5);
+    float2 fromCenter = uv - center;
+    float dist = length(fromCenter);
+    float2 dir = normalize(fromCenter + 1e-6);
+    float senseOfSpeedScale = abs(cvBlurParams.x) / 7;
 
-    // Screen coordinates
-    float2 screenCenter = float2(0.5, 0.5);
-    float2 screenPos = IN.tex0.xy;
-    float2 diff = screenPos - screenCenter;
+    // Radial distortion per channel
+    float2 offsetR = uv + dir * senseOfSpeedScale * RGB_OFFSET.r * dist;
+    float2 offsetG = uv + dir * senseOfSpeedScale * RGB_OFFSET.g * dist;
+    float2 offsetB = uv + dir * senseOfSpeedScale * RGB_OFFSET.b * dist;
 
-    // Edge falloff
-    float edgeFactor = saturate((length(diff) - EDGE_THRESHOLD) / EDGE_RANGE);
+    // Sample shifted channels
+    float r = tex2D(DIFFUSE_SAMPLER, offsetR).r;
+    float g = tex2D(DIFFUSE_SAMPLER, offsetG).g;
+    float b = tex2D(DIFFUSE_SAMPLER, offsetB).b;
 
-    // Aberration offsets
-    float2 redOffset = screenPos + edgeFactor * ABERRATION_STRENGTH;
-    float2 blueOffset = screenPos - edgeFactor * ABERRATION_STRENGTH;
-
-    // Sample colors
-    float redChannel = tex2D(DIFFUSE_SAMPLER, redOffset).r;
-    float greenChannel = tex2D(DIFFUSE_SAMPLER, screenPos).g;
-    float blueChannel = tex2D(DIFFUSE_SAMPLER, blueOffset).b;
-
-    // Aberration effect
-    float3 aberratedColor = pow(float3(redChannel, greenChannel, blueChannel), 1);
-
-    // Smooth blending
-    float blendFactor = smoothstep(EDGE_BLEND_START, EDGE_BLEND_END, edgeFactor);
-    return lerp(color, float4(aberratedColor, color.a), blendFactor);
+    return float4(r, g, b, result.a);
 }
 #endif
 
@@ -754,7 +858,7 @@ float4 applyChromaticAberration(const VtoP IN, float4 color) : COLOR
 #if USE_LENSDIRT == 1
 #define LENS_DIRT_THRESHOLD 0.125   // threshold for luminance
 #define BLEND_FACTOR        0.750    // 0 = additive, 1 = screen
-#define EDGE_FALLOFF_POWER  0.000    // falloff
+#define EDGE_FALLOFF_POWER  2.000    // falloff
 
 float4 applyLensDirt(const VtoP IN, float4 baseColor) : COLOR
 {
@@ -789,44 +893,6 @@ float4 applyLensDirt(const VtoP IN, float4 baseColor) : COLOR
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Vignette Constants
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if USE_VIGNETTE == 1
-const float vignetteAmount = VIGNETTE_AMOUNT;
-const float vignetteRadius = VIGNETTE_RADIUS;
-const float2 VIGNETTE_CENTER = float2(0.5, 0.5);
-const float vignetteCurve = VIGNETTE_CURVE;
-const float vignetteTransparency = 0.4; // Control vignette transparency
-
-// Screen Vignette function
-float4 applyVignette(VtoP IN, float4 result) : SV_Target
-{
-    float2 uv = IN.tex0.xy;
-    float distFromCenter = distance(uv, VIGNETTE_CENTER);
-    float vignette = 1 - pow(distFromCenter / vignetteRadius, vignetteCurve);
-    vignette = 1 - (1 - vignette) + vignetteAmount;
-
-    // Apply a more advanced vignette formula
-    float2 d = uv - VIGNETTE_CENTER;
-    float r = sqrt(dot(d, d));
-    float f = vignetteRadius * 0.5;
-    float s = 1 - pow(r / f, vignetteCurve);
-    vignette = s * vignette;
-
-    // Apply vignette to color
-    float3 vignetteColor = result.rgb * vignette;
-    float vignetteAlpha = vignette * vignetteTransparency;
-
-    // Blend vignette with background color (transparent black)
-    float3 blendedColor = lerp(float3(0, 0, 0), vignetteColor, vignetteAlpha);
-    float blendedAlpha = vignetteAlpha;
-
-    return float4(blendedColor, blendedAlpha);
-}
-#endif
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Filmgrain shader
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -835,7 +901,9 @@ float4 applyFilmGrain(const VtoP IN, in float4 result) : COLOR
 {
     // Sample a noise texture to simulate film grain
     float2 noiseUV = IN.tex0.xy * 5.0f;
-    float noise = generateNoise(noiseUV);
+
+    float t = frac(cvTextureOffset.w * 0.123f);
+    float noise = generateNoise(noiseUV + t);
 
     // Apply the noise to the screen texture
     result.rgb += noise * FILM_GRAIN_STRENGTH;
@@ -845,51 +913,75 @@ float4 applyFilmGrain(const VtoP IN, in float4 result) : COLOR
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Vignette Constants
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if USE_VIGNETTE == 1
+static const float2 VIGNETTE_CENTER = float2(0.5, 0.5);
+
+// Screen Vignette function
+float4 applyVignette(VtoP IN, float4 result) : COLOR
+{
+    float2 d = (IN.tex0.xy - VIGNETTE_CENTER) / max(VIGNETTE_RADIUS, 1e-3);
+    float r2 = dot(d,d);
+
+    // smooth falloff – no hard ring, only darken edges
+    float v = exp(-VIGNETTE_CURVE * r2);
+    float f = lerp(1.0, v, VIGNETTE_AMOUNT);
+
+    result.rgb *= f;
+    return result;
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Shader Pass
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+uniform float BLOOM_BLEND_MODE = 0.2;
 
 #ifdef USE_POST_EFFECTS
 float4 ShaderPass(const VtoP IN, in float4 result)
 {
 
-#if USE_DESATURATION == 1
-    result = applyDesaturation(result, DESATURATION_AMOUNT);
-#endif
-
-#if USE_SHARPEN == 1
-    result = applySharpen(IN, result);
+#if USE_WHITEBALANCE == 1
+    result.rgb = adaptiveWhiteBalance(result.rgb);
 #endif
 
 #if USE_TONEMAPPING == 1
     result.rgb = ApplyTonemap(result.rgb);
 #endif
 
-#if USE_BLOOM == 1
-    float4 bloomEffect = applyRadialBloom(IN.tex0);
+    result.rgb = adjustTemperature(result.rgb, COLOR_TEMPERATURE);
 
-    const float radius = 0.008;  
-
-    // Standard Bloom Pass with circular sampling  
-    for (int i = 0; i < 16; i++) {
-        float angle = (float)i / (float)16 * (2.0 * 3.14159265); // 2 * PI  
-        float2 offset = float2(cos(angle), sin(angle)) * radius; // Circular offset  
-
-        // Apply a Gaussian weight based on the angle  
-        float weight = exp(-0.5 * (float(i) / float(16) - 0.03) * (float(i) / float(16) - 0.03) * 0.03); // Gaussian weight  
-        bloomEffect += (applyBloom(IN.tex0.xy + offset) * weight * (0.01 / 16)) * 300;
-    }
-
-    // Blend the effect  
-    result += bloomEffect;
+#if USE_DESATURATION == 1
+    result = applyDesaturation(result, DESATURATION_AMOUNT);
 #endif
+
+    result.rgb = applySubsurfaceBlur(IN, result.rgb);
 
 #if USE_LEGACY_CURVES == 1
     result.rgb = LegacyCurveTonemap(result.rgb);
 #endif
 
-#if USE_ABERRATION == 1
-    result = applyChromaticAberration(IN, result);
+    result.rgb = processColor(result.rgb);
+
+#if USE_SHARPEN == 1
+    result = applySharpen(IN, result);
 #endif
+
+#if USE_BLOOM == 1
+    float4 bloomEffect = tex2D(BLOOM_SAMPLER, IN.tex0.xy);
+
+    float3 bloomColor = bloomEffect.rgb * BLOOM_INTENSITY;
+
+    float3 additiveBlend = result.rgb + bloomColor;
+    float3 screenBlend = 1.0f - (1.0f - result.rgb) * (1.0f - bloomColor);
+
+    result.rgb = lerp(screenBlend, additiveBlend, BLOOM_BLEND_MODE);
+#endif
+
+    result.rgb = softenHighlights(result.rgb);
 
 #if USE_LENSDIRT == 1
     result = applyLensDirt(IN, result);
@@ -903,7 +995,7 @@ float4 ShaderPass(const VtoP IN, in float4 result)
     result = applyVignette(IN, result);
 #endif
 
-return result;
+    return result;
 
 }
 #endif
@@ -913,16 +1005,28 @@ return result;
 // Visualtreatment Function
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-float4 PS_VisualTreatment(const VtoP IN, uniform bool doColourFade) : COLOR
+float4 PS_VisualTreatment(const VtoP IN, uniform bool doDepthOfField, uniform bool doColourFade) : COLOR
 {
     // Predefenitions
-    float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex0).r;
-    float4 result = tex2D(DIFFUSE_SAMPLER, IN.tex0);
+    float depth = tex2D(DEPTHBUFFER_SAMPLER, IN.tex0.xy).r;
+    float4 result = tex2D(DIFFUSE_SAMPLER, IN.tex0.xy);
     float luminance = dot(result.xyz, LUMINANCE_VECTOR);
+
+#if USE_ABERRATION == 1
+    result = applyNosChromaticAberration(IN, result);
+#endif
 
 #if USE_HDR == 1
     // HDR
-    result = applyHDR(IN, result);
+    float4 hdr = applyHDR(IN, result);
+    result.rgb = hdr.rgb; // keep original alpha
+#endif
+
+#ifndef DONTDODEPTH
+    if (doDepthOfField && cbDepthOfFieldEnabled)
+    {
+        result = DoDepthOfField(IN, result, depth);
+}
 #endif
 
 #if USE_LOG_TO_LINEAR == 1
@@ -941,12 +1045,9 @@ float4 PS_VisualTreatment(const VtoP IN, uniform bool doColourFade) : COLOR
 
 #if USE_LUT == 1
     // LUT filter (enable LUT)
-    result.xyz = tex3D(VOLUMEMAP_SAMPLER, result.xyz).xyz;
+    result.rgb = saturate(result.rgb);
+    result.rgb = tex3D(VOLUMEMAP_SAMPLER, result.rgb).rgb;
 #endif
-
-    // Apply Color Grading + Temperature adjustment
-    result.rgb = adjustTemperature(result.rgb, COLOR_TEMPERATURE);
-    result.rgb = processColor(result.rgb);
 
 #if USE_CUSTOM_COP_ENGANGEMENT == 1
     // Cop Intro Effect (Conditional Blending)
@@ -961,9 +1062,20 @@ float4 PS_VisualTreatment(const VtoP IN, uniform bool doColourFade) : COLOR
 
 #if USE_CUSTOM_SPEEDBREAKER == 1
     // Pursuit / speed breaker
-    // Define the blend color and blend factor
+    result.rgb = saturate(result.rgb);
+
     float3 blendColor = lerp(result.xyz, SPEEDBREAKER_EFFECT_COLOR, SPEEDBREAKER_EFFECT_BLEND);
-    result.xyz = lerp(result.xyz, luminance * 1.5, blendColor * BREAKER_INTENSITY);
+    float3 goldenHighlight = float3(1.1, 1.0, 0.9);
+
+    // scalar weight (kein vektorweises Lerp-Gewicht)
+    float w = saturate(max(blendColor.r, max(blendColor.g, blendColor.b)) * BREAKER_INTENSITY);
+
+    // wir haben oben schon: float luminance = dot(result.xyz, LUMINANCE_VECTOR);
+    float lum = luminance;
+
+    result.xyz = lerp(result.xyz, lum.xxx * 1.5, w);
+    result.xyz *= goldenHighlight;
+    result.xyz = saturate(result.xyz);
 #else
     // Uses Vanilla Speedbreaker
     float4 vignette = tex2D(MISCMAP2_SAMPLER, IN.tex0.xy);
@@ -999,13 +1111,15 @@ result = screenTex;
 
 #if USE_LUT == 1
     // LUT filter (enable LUT)
-    result.xyz = tex3D(VOLUMEMAP_SAMPLER, result.xyz).xyz;
+    result.rgb = saturate(result.rgb);
+    result.rgb = tex3D(VOLUMEMAP_SAMPLER, result.rgb).rgb;
 #endif
 
     // VIGNETTE
-    float4 vignette = tex2D(MISCMAP2_SAMPLER, IN.tex0.xy);
-    float mask = saturate(vignette.y);
-    result.xyz *= 1.1f - (mask * VIGNETTE_SCALE);
+    float4 vign = tex2D(MISCMAP2_SAMPLER, IN.tex0.xy);
+    float edge = saturate(vign.y);                           // 0 center, 1 edges (angenommen)
+    float edgeDarken = lerp(1.0, 1.0 - VIGNETTE_SCALE, edge);
+    result.rgb *= edgeDarken;
 
     // Calculate luminance and max channel
     float luminance = dot(LUMINANCE_VECTOR, result.xyz);
