@@ -4,7 +4,7 @@
 /********************************************************************
 
 created:	2024/02/03
-updated:    2025/02/28
+updated:    2025/08/17
 filename: 	visualtreatment.h
 file base:	visualtreatment
 file ext:	h
