@@ -26,6 +26,11 @@ shared float cfMiddleGray : cfMiddleGray;
    
 static const float3 LUMINANCE_VECTOR = float3(0.2125f, 0.7154f, 0.0721f);
 
+#ifndef SCREEN_WIDTH
+    #define SCREEN_WIDTH 1920.0f
+    #define SCREEN_HEIGHT 1080.0f
+#endif
+
 ///////////////////////////////////////////////////////////////////////////////
 
 sampler PERLINNOISE_SAMPLER = sampler_state
@@ -54,7 +59,7 @@ sampler DEPTHBUFFER_SAMPLER = sampler_state
     ASSIGN_TEXTURE(DEPTHBUFFER_TEXTURE) // needed for the PC
     AddressU = CLAMP;
     AddressV = CLAMP;
-    MIPFILTER = LINEAR;
+    MIPFILTER = NONE;
     MINFILTER = LINEAR;
     MAGFILTER = LINEAR;
 };
@@ -123,42 +128,19 @@ VtoP vertex_shader_passthru(const VS_INPUT_SCREEN IN)
 
 float4 PS_ReflectionBlur(const VtoP IN) : COLOR
 {
-    float4 sample = 0;
-
-    sample += cavSampleWeights[0] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[0].xy);
-    sample += cavSampleWeights[1] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[1].xy);
-    sample += cavSampleWeights[2] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[2].xy);
-    sample += cavSampleWeights[3] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[3].xy);
-    sample += cavSampleWeights[4] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[4].xy);
-    sample += cavSampleWeights[5] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[5].xy);
-    sample += cavSampleWeights[6] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[6].xy);
-    sample += cavSampleWeights[7] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[7].xy);
-    sample += cavSampleWeights[8] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[8].xy);
-    sample += cavSampleWeights[9] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[9].xy);
-    sample += cavSampleWeights[10] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[10].xy);
-    sample += cavSampleWeights[11] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[11].xy);
-    sample += cavSampleWeights[12] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[12].xy);
-    sample += cavSampleWeights[13] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[13].xy);
-    sample += cavSampleWeights[14] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[14].xy);
-    sample += cavSampleWeights[15] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[15].xy);
-    sample += cavSampleWeights[16] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[16].xy);
-    sample += cavSampleWeights[17] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[17].xy);
-    sample += cavSampleWeights[18] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[18].xy);
-    sample += cavSampleWeights[19] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[19].xy);
-    sample += cavSampleWeights[20] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[20].xy);
-    sample += cavSampleWeights[21] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[21].xy);
-    sample += cavSampleWeights[22] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[22].xy);
-    sample += cavSampleWeights[23] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[23].xy);
-    sample += cavSampleWeights[24] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[24].xy);
-    sample += cavSampleWeights[25] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[25].xy);
-    sample += cavSampleWeights[26] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[26].xy);
-    sample += cavSampleWeights[27] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[27].xy);
-    sample += cavSampleWeights[28] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[28].xy);
-    sample += cavSampleWeights[29] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[29].xy);
-    sample += cavSampleWeights[30] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[30].xy);
-    sample += cavSampleWeights[31] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[31].xy);
-
-    return sample * 0.75;
+    // In Shader Model 2.0 the number of texture fetches is limited and loops 
+    // are unrolled manually.
+    // Shader Model 3.0 lifts these restrictions, so we can iterate over the
+    // entire sample array in a simple for‐loop.
+    // This reduces boilerplate code and makes it easy to change the number of samples.
+    float4 sample = float4(0, 0, 0, 0);
+    [loop]
+    for (int i = 0; i < MAX_SAMPLES; ++i)
+    {
+        sample += cavSampleWeights[i] * tex2D(DIFFUSE_SAMPLER, IN.tex.xy + cavSampleOffsets[i].xy);
+    }
+    // Preserve the original behaviour by applying the 0.75 factor to the accumulated result.
+    return sample * 0.75f;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -168,197 +150,181 @@ float4 GetBase(float2 texUV)
     return base;
 }
 
-float4 PS_GaussBlur5x5(	const VtoP IN )	: COLOR
+float4 PS_GaussBlur5x5(const VtoP IN) : COLOR
 {
-    const int SAMPLE_COUNT = 20; // Define the new number of samples
-    float4	sample = 0.0f;
-    
-    // Manually unroll the loop for performance
-    sample += cavSampleWeights[0] * GetBase(IN.tex.xy + cavSampleOffsets[0].xy);
-    sample += cavSampleWeights[1] * GetBase(IN.tex.xy + cavSampleOffsets[1].xy);
-    sample += cavSampleWeights[2] * GetBase(IN.tex.xy + cavSampleOffsets[2].xy);
-    sample += cavSampleWeights[3] * GetBase(IN.tex.xy + cavSampleOffsets[3].xy);
-    sample += cavSampleWeights[4] * GetBase(IN.tex.xy + cavSampleOffsets[4].xy);
-    sample += cavSampleWeights[5] * GetBase(IN.tex.xy + cavSampleOffsets[5].xy);
-    sample += cavSampleWeights[6] * GetBase(IN.tex.xy + cavSampleOffsets[6].xy);
-    sample += cavSampleWeights[7] * GetBase(IN.tex.xy + cavSampleOffsets[7].xy);
-    sample += cavSampleWeights[8] * GetBase(IN.tex.xy + cavSampleOffsets[8].xy);
-    sample += cavSampleWeights[9] * GetBase(IN.tex.xy + cavSampleOffsets[9].xy);
-    sample += cavSampleWeights[10] * GetBase(IN.tex.xy + cavSampleOffsets[10].xy);
-    sample += cavSampleWeights[11] * GetBase(IN.tex.xy + cavSampleOffsets[11].xy);
-    sample += cavSampleWeights[12] * GetBase(IN.tex.xy + cavSampleOffsets[12].xy);
-    sample += cavSampleWeights[13] * GetBase(IN.tex.xy + cavSampleOffsets[13].xy);
-    sample += cavSampleWeights[14] * GetBase(IN.tex.xy + cavSampleOffsets[14].xy);
-    sample += cavSampleWeights[15] * GetBase(IN.tex.xy + cavSampleOffsets[15].xy);
-    sample += cavSampleWeights[16] * GetBase(IN.tex.xy + cavSampleOffsets[16].xy);
-    sample += cavSampleWeights[17] * GetBase(IN.tex.xy + cavSampleOffsets[17].xy);
-    sample += cavSampleWeights[18] * GetBase(IN.tex.xy + cavSampleOffsets[18].xy);
-    sample += cavSampleWeights[19] * GetBase(IN.tex.xy + cavSampleOffsets[19].xy);
-
-    return sample; // Return the accumulated sample
+    // Gaussian blur filters traditionally unroll the sample loop because SM2.0
+    // doesn’t support dynamic indexing.  Moving to SM3.0 we can simply loop
+    // over the samples.  The SAMPLE_COUNT constant defines how many weights
+    // and offsets to accumulate.
+    static const int SAMPLE_COUNT = 20;
+    float4 sample = float4(0, 0, 0, 0);
+    [loop]
+    for (int i = 0; i < SAMPLE_COUNT; ++i)
+    {
+        sample += cavSampleWeights[i] * GetBase(IN.tex.xy + cavSampleOffsets[i].xy);
+    }
+    return sample;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 float4 PS_DownScale4x4(in float2 vScreenPosition : TEXCOORD0) : COLOR
 {
-    const int SAMPLE_COUNT = 16; // Define the number of samples
-    float4 sample = 0;
-
-    // Manually unroll the loop for performance
-    sample += GetBase(vScreenPosition + cavSampleOffsets[0].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[1].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[2].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[3].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[4].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[5].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[6].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[7].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[8].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[9].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[10].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[11].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[12].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[13].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[14].xy);
-    sample += GetBase(vScreenPosition + cavSampleOffsets[15].xy);
-
-    // Calculate the average color
-    return sample / SAMPLE_COUNT; // Return the averaged sample
+    // Downsample a region of the screen by averaging multiple texels.  SM3.0
+    // allows us to iterate over the offsets rather than explicitly summing
+    // each term.  The result is divided by the number of samples to compute
+    // the average color.
+    static const int SAMPLE_COUNT = 16;
+    float4 sample = float4(0, 0, 0, 0);
+    [loop]
+    for (int i = 0; i < SAMPLE_COUNT; ++i)
+    {
+        sample += GetBase(vScreenPosition + cavSampleOffsets[i].xy);
+    }
+    return sample / SAMPLE_COUNT;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 float4 PS_DownScale2x2(in float2 vScreenPosition : TEXCOORD0) : COLOR
 {
-    const int SAMPLE_COUNT = 4; // Define the number of samples
-    float4 sample = 0;
-
-    // Manually unroll the loop for performance
-    sample += tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[0].xy);
-    sample += tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[1].xy);
-    sample += tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[2].xy);
-    sample += tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[3].xy);
-
-    // Calculate the average color
-    return sample / SAMPLE_COUNT; // Return the averaged sample
+    // 2×2 downsample using four taps around the current pixel.  Shader Model
+    // 3.0 removes the need to manually unroll the taps, so we loop over the
+    // first four offsets and average the results.
+    static const int SAMPLE_COUNT = 4;
+    float4 sample = float4(0, 0, 0, 0);
+    [loop]
+    for (int i = 0; i < SAMPLE_COUNT; ++i)
+    {
+        sample += tex2D(DIFFUSE_SAMPLER, vScreenPosition + cavSampleOffsets[i].xy);
+    }
+    return sample / SAMPLE_COUNT;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 float4 PS_DownScale2x2ForMotionBlur(in float2 vScreenPosition : TEXCOORD0) : COLOR
 {
-    // Sample color and depth
+    // Fetch base color and depth.  SM3.0 allows us to reorganise the depth
+    // computations in a more readable form without worrying about instruction
+    // limits.  Motion blur is reduced slightly to prevent overshoot.
     float4 sample = tex2D(DIFFUSE_SAMPLER, vScreenPosition);
-    float depth = tex2D(DEPTHBUFFER_SAMPLER, vScreenPosition).x;
+    float depthValue = tex2D(DEPTHBUFFER_SAMPLER, vScreenPosition).x;
 
-    // Fix: Ensure motion blur intensity is stable
-    float motionStrength = sample.w * 0.75; // Reduce aggressive motion blur accumulation
-    sample.xyz = lerp(sample.xyz, sample.xyz * (1.0 + motionStrength), 0.5);
+    // Reduce aggressive motion blur accumulation – scale by 0.75 and blend
+    // half of the exaggerated result back into the original colour.
+    float motionStrength = saturate(sample.w) * 0.75f;
+    sample.xyz = lerp(sample.xyz, sample.xyz * (1.0f + motionStrength), 0.5f);
 
-    // Distance falloff settings
-    const float DIST_FALLOFF_START = cvBlurParams.x; // meters
-    const float DIST_FALLOFF_END = cvBlurParams.y * 200; // meters
+    // Distance falloff settings derived from blur parameters.  Multiply
+    // cvBlurParams.y by 200 to map to scene units.
+    float distStart = cvBlurParams.x;
+    float distEnd   = cvBlurParams.y * 200.0f;
 
-    // Fix: More stable depth transformation
-    float depthFactor = 1.0 / max(0.0001, (1.0 - depth)); // Prevent divide by zero
-    float slope = -1.0 / (DIST_FALLOFF_END - DIST_FALLOFF_START);
-    float intercept = -DIST_FALLOFF_END * slope;
-    
-    // Stabilized depth-based motion blur scaling
-    depth = saturate(depthFactor * slope + intercept);
+    // Convert depth buffer values (0–1) into a physical distance factor.  The
+    // clamp prevents division by zero and extreme values.  A linear falloff
+    // slope and intercept convert the reciprocal depth into a normalised
+    // blur amount between 0 and 1.
+    float depthFactor = 1.0f / max(0.0001f, 1.0f - depthValue);
+    float slope       = -1.0f / (distEnd - distStart);
+    float intercept   = -distEnd * slope;
+    float scaledDepth = saturate(depthFactor * slope + intercept);
 
-    // Output the corrected depth
-    sample.w = saturate(depth);
-
-    return sample;
+    // Return colour with scaled depth in the alpha channel.
+    return float4(sample.xyz, scaledDepth);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Bloom
 ///////////////////////////////////////////////////////////////////////////////
 
-#define BLOOM_EXPOSURE 0.40
-#define BLOOM_BRIGHTPASS_THRESHOLD 0.375
+#define BLOOM_EXPOSURE 2.5f
+#define BLOOM_SPREAD_MULTIPLIER 2.25f 
+#define BLOOM_BRIGHTPASS_THRESHOLD 0.675f
 
-float3 tonemap(float3 col, float exposure)
+float3 tonemap_bloom(float3 col)
 {
-    const float A = 0.220;
-    const float B = 0.500;
-    const float C = 0.100;
-    const float D = 0.200;
-    const float E = 0.015;
-    const float F = 0.200;
-    const float W = 11.20;
+    const float A = 0.22f;
+    const float B = 0.50f;
+    const float C = 0.10f;
+    const float D = 0.20f;
+    const float E = 0.015f;
+    const float F = 0.20f;
+    const float W = 11.20f;
 
-    col *= exposure;
-
+    col *= BLOOM_EXPOSURE;
     col = ((col * (A * col + C * B) + D * E) / (col * (A * col + B) + D * F)) - E / F;
-    const float white = 1.0 / (((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - E / F);
+    const float white = 1.0f / (((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - E / F);
     col *= white;
     return col;
 }
 
-float4 PS_DownScaleForBloom(in float2 vScreenPosition : TEXCOORD0) : COLOR
+static const float weights[16] =
 {
-    float3 bloomSum = 0.0;
-    
-    // Bloom settings
-    float blurStrength = 0.002; // You can increase for stronger blur
-    float2 blurDirection = float2(1.0, 0.0); // Directional blur (horizontal). Use float2(1,1) for radial.
+    0.19859f, 0.18306f, 0.15176f, 0.11306f, 0.07684f, 0.04834f,
+    0.02812f, 0.01524f, 0.00776f, 0.00373f, 0.0017f, 0.00073f,
+    0.0003f, 0.00012f, 0.00004f, 0.00001f
+};
 
-    // Gaussian weights (normalize as needed)
-    const float weights[8] =
+// PASS 1: Horizontal Blur + Brightpass
+float4 PS_Bloom_Horizontal_HQ(const VtoP IN) : COLOR
+{
+    // Horizontal bloom pass.  Shader Model 3.0 allows us to use loops and
+    // dynamic array indexing, so we compute the bright pass and blur in a
+    // single loop.  The luminance is calculated using the standard
+    // LUMINANCE_VECTOR rather than an RGB max; this yields a more perceptually
+    // accurate brightness estimate.
+    float2 texelSize = float2(1.0f / SCREEN_WIDTH, 1.0f / SCREEN_HEIGHT);
+
+    // Bright-pass: compute local brightness and scale by a smooth knee around
+    // the threshold.  The knee region softens the transition so bright areas
+    // aren’t harshly clipped.
+    float3 centerColor = tex2D(DIFFUSE_SAMPLER, IN.tex).rgb;
+    float threshold    = BLOOM_BRIGHTPASS_THRESHOLD;
+    float knee         = threshold * 0.5f;
+    float brightness   = dot(centerColor, LUMINANCE_VECTOR);
+    float contribution = smoothstep(threshold - knee, threshold + knee, brightness);
+    float3 bloomSum    = centerColor * contribution * weights[0];
+
+    // Accumulate samples symmetrically around the current pixel.  Looping is
+    // possible in SM3.0 and helps keep the code concise and easy to adjust.
+    [loop]
+    for (int i = 1; i < 16; ++i)
     {
-        0.227027f, 0.1945946f, 0.1216216f, 0.054054f,
-        0.016216f, 0.005405f, 0.002f, 0.001f
-    };
+        float2 offset = float2(texelSize.x * i * BLOOM_SPREAD_MULTIPLIER, 0.0f);
 
-    // Sample center pixel first
-    float3 colorSample = tex2Dlod(DIFFUSE_SAMPLER, float4(vScreenPosition, 0, 1)).rgb;
+        // Sample to the right
+        float3 colorRight   = tex2D(DIFFUSE_SAMPLER, IN.tex + offset).rgb;
+        float brightnessR   = dot(colorRight, LUMINANCE_VECTOR);
+        float contribRight  = smoothstep(threshold - knee, threshold + knee, brightnessR);
+        bloomSum           += colorRight * contribRight * weights[i];
 
-    // Bright-pass thresholding (soft)
-    float brightness = max(colorSample.r, max(colorSample.g, colorSample.b));
-    float threshold = BLOOM_BRIGHTPASS_THRESHOLD;
-    float knee = threshold * 0.75; // Controls softness of threshold falloff
+        // Sample to the left
+        float3 colorLeft    = tex2D(DIFFUSE_SAMPLER, IN.tex - offset).rgb;
+        float brightnessL   = dot(colorLeft, LUMINANCE_VECTOR);
+        float contribLeft   = smoothstep(threshold - knee, threshold + knee, brightnessL);
+        bloomSum           += colorLeft * contribLeft * weights[i];
+    }
 
-    float soft = clamp((brightness - threshold + knee) / (2.0 * knee), 0.0, 1.0);
-    float contribution = max(brightness - threshold, 0.0) + soft;
+    return float4(tonemap_bloom(bloomSum), 1.0f);
+}
 
-    bloomSum += weights[0] * colorSample * contribution;
+/*/ PASS 2: Vertical Blur
+float4 PS_Bloom_Vertical_HQ(const VtoP IN) : COLOR
+{
+    float2 texelSize = float2(1.0f / 1280, 1.0f / 720);
+    float3 bloomSum = tex2D(DIFFUSE_SAMPLER, IN.tex).rgb * weights[0];
     
-    // Loop for additional samples in blurDirection
-    for (int i = 1; i < 8; i++)
+    [unroll]
+    for (int i = 1; i < 16; i++)
     {
-        float offset = blurStrength * float(i);
-
-        // Positive offset sample
-        float2 samplePos1 = vScreenPosition + blurDirection * offset;
-        float3 color1 = tex2Dlod(DIFFUSE_SAMPLER, float4(samplePos1, 0, 1)).rgb;
-
-        float brightness1 = max(color1.r, max(color1.g, color1.b));
-        float soft1 = clamp((brightness1 - threshold + knee) / (2.0 * knee), 0.0, 1.0);
-        float contrib1 = max(brightness1 - threshold, 0.0) + soft1;
-
-        bloomSum += weights[i] * color1 * contrib1;
-
-        // Negative offset sample (symmetric blur)
-        float2 samplePos2 = vScreenPosition - blurDirection * offset;
-        float3 color2 = tex2Dlod(DIFFUSE_SAMPLER, float4(samplePos2, 0, 1)).rgb;
-
-        float brightness2 = max(color2.r, max(color2.g, color2.b));
-        float soft2 = clamp((brightness2 - threshold + knee) / (2.0 * knee), 0.0, 1.0);
-        float contrib2 = max(brightness2 - threshold, 0.0) + soft2;
-
-        bloomSum += weights[i] * color2 * contrib2;
+        float2 offset = float2(0.0f, texelSize.y * i * BLOOM_SPREAD_MULTIPLIER);
+        bloomSum += tex2D(DIFFUSE_SAMPLER, IN.tex + offset).rgb * weights[i];
+        bloomSum += tex2D(DIFFUSE_SAMPLER, IN.tex - offset).rgb * weights[i];
     }
     
-    // Optional: Tonemap the bloom result if you want it adjusted for LDR output.
-    bloomSum = CompressColourSpace(bloomSum);
-    bloomSum = tonemap(bloomSum, BLOOM_EXPOSURE);
-    
-    return float4(bloomSum, 1.0);
-}
+    return float4(tonemap_bloom(bloomSum), 1.0f);
+}/*/
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -421,7 +387,7 @@ PrepBuffersOut PS_PrepSmokeBuffers(in float2 texCoord : TEXCOORD)
     OUT.colour0 = float4(tex2D(DIFFUSE_SAMPLER, texCoord).xyz, 0);
     OUT.colour1 = float4(tex2D(PERLINNOISE_SAMPLER, texCoord).xyz, 0);
     
-    float3 depthColor = tex2D(DEPTHBUFFER_SAMPLER, texCoord).arg;
+    float3 depthColor = tex2D(DEPTHBUFFER_SAMPLER, texCoord).rgb;
     depthColor *= float3(65536 * 255.0 / 16777215.0, 256 * 255.0 / 16777215.0, 255.0 / 16777215.0);
     depthColor += float3(1.0 / 4096.0, 1.0 / 1048576.0, 0);
     depthColor += float3(32768, 128, 0);
@@ -524,7 +490,7 @@ technique DownScaleForBloom
     pass p0
     {
         VertexShader = compile vs_3_0 vertex_shader_passthru();
-        PixelShader = compile ps_3_0 PS_DownScaleForBloom();
+        PixelShader = compile ps_3_0 PS_Bloom_Horizontal_HQ();
     }
 }
 

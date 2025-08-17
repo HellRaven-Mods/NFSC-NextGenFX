@@ -12,14 +12,17 @@ This is a shader mod that completely changes how the game Looks and feel.
 - Good Shit (idea for Fixing flare-rotation direction)
 - UNLOCALIZED (some ideas of how to fix certain szenarios)
 
+**How to set-up the mod:**
+-----------------------------------------------------------------------------------------------
+- delete FX folder (in game root Folder) if existing
+
+- copy FX Folder and SCRIPTS Folder in game root Folder, replace files if asked for
+
 **How to customize the mod:**
 -----------------------------------------------------------------------------------------------
 - open "visualtreamtent.fx" from FX folder with VisualStudio/Code, NotePad+ or any Editor you want
 - Change the values to your preferations
 - (! IMPORTANT !) To see the changes you Need to go to Video Settings and Exit out again, that will reload the shaders
-	 - if u use SunRise: in SunRise.ini (scripts folder) set Shaderreload key to 35 (END Key), than you can reload with a keypress
-
- !! DO NOT TOUCH THE OTHER FILES OR YOU ELSE YOU CAN BRAKE THE MOD !!
 
 **List of what added and changed:**
 -----------------------------------------------------------------------------------------------
