@@ -95,3 +95,48 @@ float3 Tonemap_NFSHeatStyle(float3 color)
     float3 mapped = color / (1.0 + color);
     return saturate(mapped);
 }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Additional tone mapping operators
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Reinhard II / Extended Reinhard tone mapping.  This variant introduces a white
+// point so bright highlights use more of the available range before
+// compressing.  See the referenced GLSL implementation for details【600481115796231†L140-L145】.
+float3 Tonemap_Reinhard2(float3 color)
+{
+    const float L_white = 4.0f;
+    // Scale colour by a factor that depends on the squared white point.
+    float3 numerator = color * (1.0 + color / (L_white * L_white));
+    float3 denominator = 1.0 + color;
+    return saturate(numerator / denominator);
+}
+
+// Uchimura 2017 tone mapping curve.  This operator has three regions: a toe,
+// linear mid section and a shoulder, defined by the parameters below.  The
+// reference GLSL implementation was adapted from public sources【600481115796231†L150-L181】.
+float3 Tonemap_Uchimura(float3 color)
+{
+    const float P = 1.0f;   // maximum display brightness
+    const float a = 1.0f;   // contrast
+    const float m = 0.22f;  // linear section start
+    const float l = 0.4f;   // linear section length
+    const float c = 1.33f;  // toe strength (black level)
+    const float b = 0.0f;   // pedestal (minimum)
+
+    float l0 = ((P - m) * l) / a;
+    float S1 = m + a * l0;
+    float S0 = m + l0;
+    float C2 = (a * P) / (P - S1);
+    float CP = -C2 / P;
+
+    float3 w0 = 1.0 - smoothstep(0.0, m, color);
+    float3 w2 = step(m + l0, color);
+    float3 w1 = 1.0 - w0 - w2;
+
+    float3 T = m * pow(color / m, c) + b;
+    float3 L = m + a * (color - m);
+    float3 S = P - (P - S1) * exp(CP * (color - S0));
+
+    return saturate(T * w0 + L * w1 + S * w2);
+}
