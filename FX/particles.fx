@@ -29,13 +29,20 @@ float4 cavLightDirections[10]       : REG_cavLightDirections;
 
 static const float FuzzWidth = 0.15f;
 
+// Threshold at which bloom begins.  Lower values create bloom on dimmer colours.
+static const float BloomThreshold = 0.7f;
+
+// Intensity of the bloom added back into the final colour.  Increase for a stronger glow.
+static const float BloomIntensity = 0.5f;
+
 static const float magnitude_debug = 13.5;
 static const float MaxParticleSize = 2.5f;
 
-static const float MaterialShininess = 10000000;
-
+static const float ParticleShininess = 64.0f;
 static const float3 MaterialSpecular = float3(1.2, 1.2, 1.2);
 static const float ParticleBrightness = 0.6;
+
+static const float MaterialShininess = 10000000;
 
 // these should be artist controlled	
 static const float3 ambient_colour = float3(0.4, 0.45, 0.5);
@@ -45,7 +52,7 @@ static const float3 ambient_colour = float3(0.4, 0.45, 0.5);
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_TEXTURE(MISCMAP1_TEXTURE)
-sampler MISCMAP1_SAMPLER = sampler_state	// backbuffer for screen distortion
+sampler MISCMAP1_SAMPLER = sampler_state // backbuffer for screen distortion
 {
 	ASSIGN_TEXTURE(MISCMAP1_TEXTURE)
 	AddressU = CLAMP;
@@ -66,15 +73,15 @@ sampler OPACITY_SAMPLER = sampler_state	// rain alpha texture
 	DECLARE_MAGFILTER(LINEAR)
 };
 
-DECLARE_TEXTURE(DIFFUSEMAP_TEXTURE) // PC edit - these NEED to be here for the shader to work!
-sampler DIFFUSE_SAMPLER : register(ps_2_0, s0) = sampler_state
+DECLARE_TEXTURE(DIFFUSEMAP_TEXTURE) // needed for the PC
+sampler DIFFUSE_SAMPLER = sampler_state
 {
-	ASSIGN_TEXTURE(DIFFUSEMAP_TEXTURE)
+    ASSIGN_TEXTURE(DIFFUSEMAP_TEXTURE)
     AddressU = CLAMP;
     AddressV = CLAMP;
-	DECLARE_MIPFILTER(LINEAR)
-	DECLARE_MINFILTER(LINEAR)
-	DECLARE_MAGFILTER(LINEAR)
+    DECLARE_MIPFILTER(LINEAR)
+    DECLARE_MINFILTER(LINEAR)
+    DECLARE_MAGFILTER(LINEAR)
 };
 
 DECLARE_TEXTURE(NORMALMAP_TEXTURE)
@@ -102,7 +109,7 @@ sampler HEIGHTMAP_SAMPLER = sampler_state
 DECLARE_TEXTURE(DEPTHBUFFER_TEXTURE) // needed for the PC
 sampler DEPTHBUFFER_SAMPLER = sampler_state
 {
-    ASSIGN_TEXTURE(DEPTHBUFFER_TEXTURE) // needed for the PC
+    ASSIGN_TEXTURE(DEPTHBUFFER_TEXTURE)
     AddressU = CLAMP;
     AddressV = CLAMP;
     MIPFILTER = LINEAR;
@@ -207,8 +214,35 @@ float ComputeFuzzz(const VtoP_NormalMapped IN)
     float distanceToParticle = (-Q * zNear / (depthBufferDistToParticle - Q));
 
     float distanceBetweenParticleAndGround = abs(zDist - distanceToParticle);
-    float fuzzz = saturate(distanceBetweenParticleAndGround * 1);
-    return fuzzz;
+    // Use FuzzWidth to control how quickly the fuzz ramps up.  
+    // Larger values produce a softer transition, smaller values produce a harder edge.
+    return saturate(distanceBetweenParticleAndGround / max(FuzzWidth, 1e-5f));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Helper functions
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Generate a pseudo-random number based off a 2D seed.  This uses a simple hash
+// function to avoid the need for textures or noise textures.  The returned
+// value is in the range [0,1].  Because sin() and dot() are available in SM3,
+// this works on any DX9.0c hardware.
+float random(float2 seed)
+{
+    return frac(sin(dot(seed, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+// Apply a simple bloom to a linear colour.  If the colour intensity exceeds
+// a threshold it is boosted by the bloom intensity.  This helps bright
+// highlights stand out without over-brightening midtones.  Threshold and
+// intensity are controlled via the global constants defined at the top of
+// this file.
+float3 ApplyBloom(float3 colour)
+{
+    // Compute perceived luminance using Rec.709 coefficients
+    float lum = dot(colour, float3(0.2126, 0.7152, 0.0722));
+    float bloom = saturate((lum - BloomThreshold) / max(1e-5, (1.0 - BloomThreshold))) * BloomIntensity;
+    return colour + bloom;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -245,7 +279,7 @@ float3 ApplyColorGradeParticles(float3 color)
 
 float3 ApplyColorGradeRain(float3 color)
 {
-    float3 tint = float3(1.2, 1.0, 1.9); // blue-ish
+    float3 tint = float3(1.3, 1.0, 1.9); // blue-ish
     color *= tint;
 
     // simple cross processing
@@ -270,6 +304,11 @@ VtoP_NormalMapped vertex_shader_particles(const VS_INPUT IN)
 
 	// Rotate the up and right around the facing
     float angle = IN.size.z;
+    // Introduce a small random rotation per-particle to break up obvious alignment.
+    // This variation helps to avoid visible tiling when many particles are on screen.
+    float randVal = random(IN.position.xy + IN.tex.xy);
+    float jitter = (randVal - 0.5f) * 2.0f * 0.1f; // range [-0.1,0.1] radians
+    angle += jitter;
     float3x3 rotation = BuildRotate(angle, facing);
     right = mul(right, rotation);
     up = mul(up, rotation);
@@ -300,13 +339,22 @@ VtoP_NormalMapped vertex_shader_particles(const VS_INPUT IN)
     float3 toLightSource = normalize(lightPos - worldPos);
 
 	// Create the matrix which transforms from world space to tangent space
-    float3 tangent = right;
-    float3 binormal = up;
-    float3 normal = -facing;
+    // Build an orthonormal tangent space basis.  Normalising each component
+    // ensures that the normal map is correctly interpreted irrespective of
+    // particle scale or non-uniform billboard orientation.  Without
+    // normalisation the basis vectors could be skewed after scaling or
+    // rotation, leading to incorrect lighting.
+    float3 tangent = normalize(right);
+    float3 binormal = normalize(up);
+    float3 normal = normalize(-facing);
     float3x3 matTSpace = transpose(float3x3(tangent, binormal, normal));
 
+    // Pass the tangent-space light direction into the pixel shader.  Do not overwrite
+    // this vector with a scalar attenuation value—such overwriting would destroy
+    // the directional information and cause all particles to use a constant light
+    // direction.  If attenuation by particle lifetime is needed it should be
+    // applied to the colour or alpha instead of the direction vector.
     OUT.to_light_tan.xyz = mul(toLightSource, matTSpace);
-    OUT.to_light_tan = saturate(1.0 - IN.size.w);
 
     float3 toEyeWorld = normalize(cvLocalEyePos - worldPos);
     float3 toEyeTan = mul(toEyeWorld, matTSpace);
@@ -374,7 +422,10 @@ PS_OUTPUT pixel_shader_particles(const VtoP_NormalMapped IN)
     // Specular highlights
     float3 half_angle = normalize(IN.half_angle_tan);
     float nDotH = saturate(dot(normal, half_angle));
-    float3 specular = MaterialSpecular * pow(nDotH, MaterialShininess);
+    // Use the particle-specific shininess constant defined at the top of the file.  This
+    // results in a more realistic highlight on particles compared to an extremely
+    // tight specular lobe.
+    float3 specular = MaterialSpecular * pow(nDotH, ParticleShininess);
 
     // Combine lighting components
     float3 lighting = ambient + diffuseColour + rimColour + specular;
@@ -387,11 +438,21 @@ PS_OUTPUT pixel_shader_particles(const VtoP_NormalMapped IN)
 
     // Apply brightness adjustment with clamping to avoid over-brightening
     finalColor *= saturate(ParticleBrightness);
+
+    // Apply artistic colour grading
     finalColor = ApplyColorGradeParticles(finalColor);
 
-    // Output final color
+    // Add a bloom component on the highlights.  This uses the global
+    // BloomThreshold and BloomIntensity defined near the top of the file.
+    finalColor = ApplyBloom(finalColor);
+
+    // Clamp the colour to the [0,1] range to avoid overflows after tonemapping
+    // and bloom adjustments.
+    finalColor = saturate(finalColor);
+
+    // Output final colour and preserve alpha for blending
     OUT.color.rgb = finalColor;
-    OUT.color.a = baseColour.a; // Preserve alpha for blending
+    OUT.color.a = baseColour.a;
 
     return OUT;
 }
@@ -421,8 +482,9 @@ PS_OUTPUT pixel_shader_raindrop(const VtoP_NormalMapped IN) : COLOR
     float depthBufferDistToParticle = IN.position2.z / IN.position2.w;
     float distanceToParticle = (-Q * zNear / (depthBufferDistToParticle - Q));
 
-    // Calculate distance between particle and ground
-    float distanceBetweenParticleAndGround = abs(zDist - distanceToParticle);
+    // Distance between particle and ground is handled in ComputeFuzzz(); we do not need
+    // the local variable here.  ComputeFuzzz will sample the depth buffer and
+    // determine the fuzziness based on depth differences.
     float fuzzz = ComputeFuzzz(IN);
 
     // Calculate normal map
@@ -440,7 +502,7 @@ PS_OUTPUT pixel_shader_raindrop(const VtoP_NormalMapped IN) : COLOR
     float3 half_angle = normalize(IN.half_angle_tan);
     float nDotH = saturate(dot(normal, half_angle));
     float3 MaterialSpecular = float3(0.4, 0.4, 0.4);
-    float3 specular = MaterialSpecular * pow(nDotH, MaterialShininess);
+    float3 specular = MaterialSpecular * pow(nDotH, ParticleShininess);
 
     // Apply diffuse lighting
     float3 toLight = normalize(IN.to_light_tan);
@@ -459,9 +521,20 @@ PS_OUTPUT pixel_shader_raindrop(const VtoP_NormalMapped IN) : COLOR
 
     // Combine colors
     OUT.color.rgb = fuzzz * shadow * baseColour * (ambient_colour + diffuseColour + specularColour + rimColour + specular);
+
+    // Apply simple colour grading to give raindrops a cooler tint.
     OUT.color.rgb = ApplyColorGradeRain(OUT.color.rgb);
+
+    // Add bloom to bright droplets.  This helps specular highlights stand
+    // out against darker backgrounds.
+    OUT.color.rgb = ApplyBloom(OUT.color.rgb);
+
+    // Clamp colour to [0,1] after applying bloom adjustments.
+    OUT.color.rgb = saturate(OUT.color.rgb);
+
+    // Preserve alpha, modulated by shadow and fuzz
     OUT.color.a = baseColour.a * shadow * fuzzz;
-	
+
     return OUT;
 }
 
@@ -561,10 +634,19 @@ float4 pixel_shader_flares(const VtoP_FLARES IN) : COLOR
     // Check for overexposure and apply the effect
     if (result.r > overexposure_threshold || result.g > overexposure_threshold || result.b > overexposure_threshold)
     {
-        // Brighten the color
+        // Brighten the colour if any channel is above the threshold.
         result.rgb *= overexposure_intensity;
     }
-    
+
+    // Tone map the result to compress highlights into a manageable range.
+    result.rgb = Uncharted2ToneMapping(result.rgb);
+
+    // Add a bloom contribution.  This ensures flares respond to the same
+    // tone mapping pipeline as other effects.
+    result.rgb = ApplyBloom(result.rgb);
+    // Clamp colour to [0,1] after processing
+    result.rgb = saturate(result.rgb);
+
     return result;
 }
 
@@ -656,9 +738,18 @@ VtoP_SFLARES vertex_shader_streak_flares(const VS_INPUT_FLARES IN)
 
 float4 pixel_shader_streak_flares(const VtoP_SFLARES IN) : COLOR
 {
-    float4 result = tex2Dbias(DIFFUSE_SAMPLER, IN.tex);;
+    float4 result = tex2Dbias(DIFFUSE_SAMPLER, IN.tex);
     result *= IN.color;
-	
+
+    // Apply tone mapping so the streak does not clip and then apply bloom.
+    result.rgb = Uncharted2ToneMapping(result.rgb);
+    // Post-process streak flares with a subtle bloom.  This helps long streaks
+    // integrate smoothly with the rest of the scene without blowing out
+    // highlights.
+    result.rgb = ApplyBloom(result.rgb);
+    // Clamp colour to [0,1] after processing
+    result.rgb = saturate(result.rgb);
+
     return result;
 }
 
@@ -709,6 +800,9 @@ float4 pixel_shader_onscreen_distort(const VtoP_RAIN IN) : COLOR0
     float4 result = background * opacity.y;
     result.w = opacity.r * cvBaseAlphaRef.x;
 
+    // Clamp colour after processing
+    result.rgb = saturate(result.rgb);
+
     return result;
 }
 
@@ -741,7 +835,10 @@ technique raindrop <int shader = 1;>
     {
         FogEnable = TRUE;
 
-        VertexShader = compile vs_1_1 vertex_shader_particles();
+        // Upgrade vertex shader from Shader Model 1.1 to 3.0.  SM3 allows
+        // more instructions and constant registers, which modern GPUs can
+        // handle without issue.
+        VertexShader = compile vs_3_0 vertex_shader_particles();
         PixelShader = compile ps_3_0 pixel_shader_raindrop();
     }
 }
@@ -768,7 +865,9 @@ technique onscreen_distort <int shader = 1;>
 {
 	pass p0
 	{
-		VertexShader = compile vs_1_1 vertex_shader_passthru();
+        // Replace the legacy 1.1 vertex shader profile with 3.0 for maximum
+        // instruction count and feature support.
+        VertexShader = compile vs_3_0 vertex_shader_passthru();
 		PixelShader  = compile ps_3_0 pixel_shader_onscreen_distort();
 	}
 }
